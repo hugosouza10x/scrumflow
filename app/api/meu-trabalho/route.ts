@@ -1,24 +1,56 @@
 export const dynamic = "force-dynamic";
 
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { logger } from "@/lib/logger";
 import { getAccessibleProjectIds } from "@/lib/authorization";
 
-export async function GET() {
+const cardInclude = {
+  projeto: {
+    select: {
+      id: true,
+      nome: true,
+      cliente: { select: { id: true, nome: true, cor: true } },
+    },
+  },
+  cliente: { select: { id: true, nome: true, cor: true } },
+  sprint: { select: { id: true, nome: true, dataFim: true } },
+  _count: { select: { subtarefas: true } },
+} as const;
+
+export async function GET(request: NextRequest) {
   const session = await getSession();
   if (!session) return NextResponse.json({ message: "Não autorizado." }, { status: 401 });
 
   try {
     const projectIds = await getAccessibleProjectIds(session.id, session.cargo.slug);
 
-    // Filtro de projeto para cards (inclui avulsos com projetoId null)
     const projetoFilter =
       projectIds === "all"
         ? {}
         : { OR: [{ projetoId: { in: projectIds as string[] } }, { projetoId: null }] };
 
+    const concluidos = new URL(request.url).searchParams.get("concluidos") === "true";
+
+    // Rota para buscar concluídas recentemente
+    if (concluidos) {
+      const trintaDiasAtras = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+      const cards = await prisma.card.findMany({
+        where: {
+          responsavelId: session.id,
+          status: { in: ["CONCLUIDO", "CANCELADO"] },
+          updatedAt: { gte: trintaDiasAtras },
+          ...projetoFilter,
+        },
+        include: cardInclude,
+        orderBy: { updatedAt: "desc" },
+        take: 20,
+      });
+      return NextResponse.json({ cards });
+    }
+
+    // Rota padrão: itens ativos
     const [cards, demandas] = await Promise.all([
       prisma.card.findMany({
         where: {
@@ -26,18 +58,7 @@ export async function GET() {
           status: { notIn: ["CONCLUIDO", "CANCELADO"] },
           ...projetoFilter,
         },
-        include: {
-          projeto: {
-            select: {
-              id: true,
-              nome: true,
-              cliente: { select: { id: true, nome: true, cor: true } },
-            },
-          },
-          cliente: { select: { id: true, nome: true, cor: true } },
-          sprint: { select: { id: true, nome: true, dataFim: true } },
-          _count: { select: { subtarefas: true } },
-        },
+        include: cardInclude,
         orderBy: [
           { prioridade: "desc" },
           { prazo: "asc" },
@@ -65,12 +86,8 @@ export async function GET() {
 
     const total = cards.length;
     const bloqueados = cards.filter((c) => c.bloqueado).length;
-    const atrasados = cards.filter(
-      (c) => c.prazo && new Date(c.prazo) < new Date()
-    ).length;
-    const urgentes = cards.filter(
-      (c) => c.prioridade === "URGENTE" || c.prioridade === "ALTA"
-    ).length;
+    const atrasados = cards.filter((c) => c.prazo && new Date(c.prazo) < new Date()).length;
+    const urgentes = cards.filter((c) => c.prioridade === "URGENTE" || c.prioridade === "ALTA").length;
 
     return NextResponse.json({ cards, demandas, stats: { total, bloqueados, atrasados, urgentes } });
   } catch (e) {

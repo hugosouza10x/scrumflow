@@ -1,8 +1,8 @@
 "use client";
 
 import { useDraggable } from "@dnd-kit/core";
-import Link from "next/link";
-import { CalendarDays, CheckSquare, Pencil, Clock, Zap, Layers, ShieldAlert, MoreVertical, Archive, Trash2 } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { CalendarDays, CheckSquare, Pencil, Clock, Zap, Layers, ShieldAlert, MoreVertical, Archive, Trash2, UserX } from "lucide-react";
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -86,6 +86,7 @@ export function KanbanCard({
   fieldConfig = DEFAULT_FIELDS,
 }: KanbanCardProps) {
   const isDemanda = card.tipo === "demanda";
+  const router = useRouter();
 
   const { attributes, listeners, setNodeRef } = useDraggable({
     id: card.id,
@@ -147,6 +148,10 @@ export function KanbanCard({
       ? [card.responsavel]
       : [];
 
+  // Badge "Sem responsável" para cards em execução
+  const isExecutionStatus = ["A_FAZER", "EM_ANDAMENTO", "EM_REVISAO"].includes(card.status);
+  const missingResponsavel = !isDemanda && isExecutionStatus && responsaveisLista.length === 0;
+
   // Subtarefas progress
   const totalSub = card._count?.subtarefas ?? 0;
   const concluidasSub = card._countConcluidas ?? 0;
@@ -162,6 +167,9 @@ export function KanbanCard({
       <div
         ref={isDemanda ? undefined : setNodeRef}
         {...(!isOverlay && !isDemanda ? { ...listeners, ...attributes } : {})}
+        onClick={() => {
+          if (!isOverlay && !isDemanda) router.push(`/dashboard/cards/${card.id}`);
+        }}
         className={[
           "group relative rounded-lg border bg-card p-3 text-sm shadow-sm hover:shadow-md transition-shadow space-y-2",
           !isDemanda ? "cursor-grab active:cursor-grabbing" : "cursor-default",
@@ -248,18 +256,7 @@ export function KanbanCard({
 
         {/* Título */}
         <div className={!isDemanda ? "pr-6" : ""}>
-          {isOverlay || isDemanda ? (
-            <p className="font-medium line-clamp-2 leading-snug">{card.titulo}</p>
-          ) : (
-            <Link
-              href={`/dashboard/cards/${card.id}`}
-              className="font-medium line-clamp-2 leading-snug hover:text-primary transition-colors"
-              onClick={(e) => e.stopPropagation()}
-              onPointerDown={(e) => e.stopPropagation()}
-            >
-              {card.titulo}
-            </Link>
-          )}
+          <p className="font-medium line-clamp-2 leading-snug">{card.titulo}</p>
         </div>
 
         {/* Badges: prioridade + estimativa + status especiais */}
@@ -329,6 +326,12 @@ export function KanbanCard({
             )}
           </div>
 
+          {missingResponsavel && (
+            <span className="inline-flex items-center gap-0.5 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">
+              <UserX className="h-3 w-3" />
+              Sem responsável
+            </span>
+          )}
           {fieldConfig.responsavel && responsaveisLista.length > 0 && (
             <div className="flex flex-wrap gap-1">
               {responsaveisLista.map((r) => (

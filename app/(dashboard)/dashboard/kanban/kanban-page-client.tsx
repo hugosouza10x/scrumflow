@@ -439,7 +439,36 @@ export function KanbanPageClient({
   });
 
   const handleStatusChange = async (cardId: string, newStatus: string) => {
-    await updateStatus.mutateAsync({ cardId, status: newStatus });
+    const card = (allCards as CardForKanban[]).find((c) => c.id === cardId);
+    const needsAutoAssign =
+      ["A_FAZER", "EM_ANDAMENTO"].includes(newStatus) &&
+      card != null &&
+      !card.responsaveis?.length &&
+      !card.responsavel;
+
+    if (needsAutoAssign) {
+      // Optimistic update
+      await queryClient.cancelQueries({ queryKey });
+      const previous = queryClient.getQueryData<CardForKanban[]>(queryKey);
+      queryClient.setQueryData<CardForKanban[]>(queryKey, (old = []) =>
+        old.map((c) => (c.id === cardId ? { ...c, status: newStatus } : c))
+      );
+      try {
+        await fetch(`/api/cards/${cardId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ status: newStatus, responsaveisIds: [sessionUserId] }),
+        });
+        toast.success(`Card movido para ${CARD_STATUS_LABEL[newStatus as CardStatus] ?? newStatus}`);
+      } catch {
+        if (previous) queryClient.setQueryData(queryKey, previous);
+        toast.error("Não foi possível mover o card. Tente novamente.");
+      } finally {
+        queryClient.invalidateQueries({ queryKey });
+      }
+    } else {
+      await updateStatus.mutateAsync({ cardId, status: newStatus });
+    }
   };
 
   const handleQuickAdd = async (

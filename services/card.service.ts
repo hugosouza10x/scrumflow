@@ -231,8 +231,24 @@ export const cardService = {
       if (prazo !== undefined && str(prazo) !== str(card.prazo))
         alteracoes.push({ campo: "prazo", anterior: str(card.prazo), novo: str(prazo) });
 
-      if (data.status !== undefined && data.status !== card.status)
+      if (data.status !== undefined && data.status !== card.status) {
         alteracoes.push({ campo: "status", anterior: card.status, novo: data.status });
+
+        // Auto-timestamps de ciclo de vida
+        const ud = updateData as Record<string, unknown>;
+        if (data.status === "EM_ANDAMENTO" && !(card as Record<string, unknown>).iniciadoEm) {
+          ud.iniciadoEm = new Date();
+        }
+        if (["CONCLUIDO", "CANCELADO"].includes(data.status)) {
+          ud.concluidoEm = new Date();
+        }
+        if (data.status === "BLOQUEADO") {
+          ud.bloqueadoEm = new Date();
+        }
+        if (card.status === "BLOQUEADO" && data.status !== "BLOQUEADO") {
+          ud.bloqueadoEm = null;
+        }
+      }
 
       if (data.sprintId !== undefined && data.sprintId !== card.sprintId)
         alteracoes.push({ campo: "sprintId", anterior: str(card.sprintId), novo: str(data.sprintId) });

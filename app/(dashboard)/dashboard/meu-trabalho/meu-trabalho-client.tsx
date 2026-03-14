@@ -7,7 +7,7 @@ import Link from "next/link";
 import {
   ShieldAlert, Clock, AlertTriangle, Zap, CalendarDays,
   CheckSquare, FolderKanban, ArrowRight, ListTodo,
-  Search, SearchX, CheckCircle2, X,
+  Search, SearchX, CheckCircle2, X, ChevronDown, PlayCircle,
 } from "lucide-react";
 import { CardStatusBadge, PrioridadeBadge, RefinamentoBadge } from "@/components/ui/status-badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -322,8 +322,9 @@ export function MeuTrabalhoClient({ userName }: { userName: string }) {
   const [busca, setBusca] = useState(() => searchParams.get("q") ?? "");
   const [buscaDebounced, setBuscaDebounced] = useState(() => searchParams.get("q") ?? "");
   const [filtroTipo, setFiltroTipo] = useState<"todos" | "cards" | "demandas">(
-    () => (searchParams.get("tipo") as "todos" | "cards" | "demandas") ?? "todos"
+    () => (searchParams.get("tipo") as "todos" | "cards" | "demandas") ?? "cards"
   );
+  const [demandasExpanded, setDemandasExpanded] = useState(false);
   const [filtroPrioridades, setFiltroPrioridades] = useState<string[]>(
     () => searchParams.get("p") ? searchParams.get("p")!.split(",").filter(Boolean) : []
   );
@@ -342,7 +343,7 @@ export function MeuTrabalhoClient({ userName }: { userName: string }) {
   useEffect(() => {
     const params = new URLSearchParams();
     if (buscaDebounced) params.set("q", buscaDebounced);
-    if (filtroTipo !== "todos") params.set("tipo", filtroTipo);
+    if (filtroTipo !== "cards") params.set("tipo", filtroTipo);
     if (filtroPrioridades.length > 0) params.set("p", filtroPrioridades.join(","));
     if (mostrarConcluidas) params.set("concluidas", "1");
     const qs = params.toString();
@@ -413,11 +414,11 @@ export function MeuTrabalhoClient({ userName }: { userName: string }) {
   const limparFiltros = () => {
     setBusca("");
     setBuscaDebounced("");
-    setFiltroTipo("todos");
+    setFiltroTipo("cards");
     setFiltroPrioridades([]);
   };
 
-  const temFiltroAtivo = busca || filtroTipo !== "todos" || filtroPrioridades.length > 0;
+  const temFiltroAtivo = busca || filtroTipo !== "cards" || filtroPrioridades.length > 0;
 
   // ── Filtragem (hooks antes de qualquer return condicional) ──
   const cards = data?.cards ?? [];
@@ -452,13 +453,20 @@ export function MeuTrabalhoClient({ userName }: { userName: string }) {
     });
   }, [demandas, filtroTipo, filtroPrioridades, buscaDebounced]);
 
+  const emAndamento = useMemo(() => cardsFiltrados.filter(
+    (c) => c.status === "EM_ANDAMENTO" && !c.bloqueado
+  ), [cardsFiltrados]);
   const bloqueados = useMemo(() => cardsFiltrados.filter((c) => c.bloqueado), [cardsFiltrados]);
-  const atrasados = useMemo(() => cardsFiltrados.filter((c) => c.prazo && new Date(c.prazo) < new Date() && !c.bloqueado), [cardsFiltrados]);
+  const atrasados = useMemo(() => cardsFiltrados.filter(
+    (c) => c.prazo && new Date(c.prazo) < new Date() && !c.bloqueado && c.status !== "EM_ANDAMENTO"
+  ), [cardsFiltrados]);
   const urgentes = useMemo(() => cardsFiltrados.filter(
-    (c) => !c.bloqueado && !(c.prazo && new Date(c.prazo) < new Date()) && (c.prioridade === "URGENTE" || c.prioridade === "ALTA")
+    (c) => !c.bloqueado && !(c.prazo && new Date(c.prazo) < new Date()) &&
+      (c.prioridade === "URGENTE" || c.prioridade === "ALTA") && c.status !== "EM_ANDAMENTO"
   ), [cardsFiltrados]);
   const restantes = useMemo(() => cardsFiltrados.filter(
-    (c) => !c.bloqueado && !(c.prazo && new Date(c.prazo) < new Date()) && c.prioridade !== "URGENTE" && c.prioridade !== "ALTA"
+    (c) => !c.bloqueado && !(c.prazo && new Date(c.prazo) < new Date()) &&
+      c.prioridade !== "URGENTE" && c.prioridade !== "ALTA" && c.status !== "EM_ANDAMENTO"
   ), [cardsFiltrados]);
 
   // ── Loading ──
@@ -609,25 +617,14 @@ export function MeuTrabalhoClient({ userName }: { userName: string }) {
           </div>
         ) : (
           <div className="space-y-6">
-            {/* Demandas para refinar */}
-            {demandasFiltradas.length > 0 && (
+            {/* Em andamento — topo */}
+            {emAndamento.length > 0 && (
               <section>
-                <h2 className="text-sm font-semibold text-violet-600 dark:text-violet-400 flex items-center gap-1.5 mb-2">
-                  <ListTodo className="h-4 w-4" /> Para refinar ({demandasFiltradas.length})
+                <h2 className="text-sm font-semibold text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5 mb-2">
+                  <PlayCircle className="h-4 w-4" /> Em andamento ({emAndamento.length})
                 </h2>
-                <p className="text-xs text-muted-foreground mb-2">
-                  Clique em uma demanda para ver detalhes. Use o seletor à direita para atualizar o status rapidamente.
-                </p>
                 <div className="space-y-2">
-                  {demandasFiltradas.map((d) => (
-                    <DemandaRow
-                      key={d.id}
-                      demanda={d}
-                      onStatusChange={(id, status) => updateDemandaStatus.mutate({ id, statusRefinamento: status })}
-                      onOpen={setDemandaDetail}
-                      isPending={updateDemandaStatus.isPending}
-                    />
-                  ))}
+                  {emAndamento.map((c) => <CardRow key={c.id} card={c} />)}
                 </div>
               </section>
             )}
@@ -674,6 +671,41 @@ export function MeuTrabalhoClient({ userName }: { userName: string }) {
                 <div className="space-y-2">
                   {restantes.map((c) => <CardRow key={c.id} card={c} />)}
                 </div>
+              </section>
+            )}
+
+            {/* Demandas para refinar — colapsável, ao final */}
+            {demandasFiltradas.length > 0 && (
+              <section className="rounded-xl border overflow-hidden">
+                <button
+                  onClick={() => setDemandasExpanded((v) => !v)}
+                  className="w-full flex items-center justify-between px-4 py-3 text-sm font-semibold text-violet-600 dark:text-violet-400 hover:bg-violet-50/60 dark:hover:bg-violet-950/20 transition-colors"
+                >
+                  <span className="flex items-center gap-1.5">
+                    <ListTodo className="h-4 w-4" />
+                    Para refinar
+                    <span className="inline-flex items-center justify-center h-5 min-w-5 rounded-full bg-violet-100 dark:bg-violet-900/40 text-[10px] font-bold px-1.5 text-violet-700 dark:text-violet-300">
+                      {demandasFiltradas.length}
+                    </span>
+                  </span>
+                  <ChevronDown className={`h-4 w-4 transition-transform ${demandasExpanded ? "rotate-180" : ""}`} />
+                </button>
+                {demandasExpanded && (
+                  <div className="border-t p-3 space-y-2">
+                    <p className="text-xs text-muted-foreground mb-2">
+                      Clique em uma demanda para ver detalhes. Use o seletor à direita para atualizar o status rapidamente.
+                    </p>
+                    {demandasFiltradas.map((d) => (
+                      <DemandaRow
+                        key={d.id}
+                        demanda={d}
+                        onStatusChange={(id, status) => updateDemandaStatus.mutate({ id, statusRefinamento: status })}
+                        onOpen={setDemandaDetail}
+                        isPending={updateDemandaStatus.isPending}
+                      />
+                    ))}
+                  </div>
+                )}
               </section>
             )}
           </div>

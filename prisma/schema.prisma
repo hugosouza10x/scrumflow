@@ -221,6 +221,9 @@ model Card {
   ultimaAtualizacao DateTime? @map("ultima_atualizacao") // para regra "sem atualização > 2 dias"
   arquivado       Boolean    @default(false)
   arquivadoEm     DateTime?  @map("arquivado_em")
+  iniciadoEm      DateTime?  @map("iniciado_em")
+  concluidoEm     DateTime?  @map("concluido_em")
+  bloqueadoEm     DateTime?  @map("bloqueado_em")
   createdAt       DateTime   @default(now())
   updatedAt       DateTime   @updatedAt
 

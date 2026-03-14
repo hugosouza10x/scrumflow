@@ -134,6 +134,8 @@ model Demanda {
   statusRefinamento StatusRefinamento @default(NAO_REFINADO) @map("status_refinamento")
   projetoId         String?            @map("projeto_id")
   convertida        Boolean            @default(false) // true quando virou card
+  arquivada         Boolean            @default(false)
+  arquivadaEm       DateTime?          @map("arquivada_em")
   createdAt         DateTime           @default(now())
   updatedAt         DateTime           @updatedAt
 
@@ -217,6 +219,8 @@ model Card {
   bloqueadoPorId  String?    @map("bloqueado_por_id")
   demandaId       String?    @map("demanda_id") // demanda de origem (rastreabilidade)
   ultimaAtualizacao DateTime? @map("ultima_atualizacao") // para regra "sem atualização > 2 dias"
+  arquivado       Boolean    @default(false)
+  arquivadoEm     DateTime?  @map("arquivado_em")
   createdAt       DateTime   @default(now())
   updatedAt       DateTime   @updatedAt
 

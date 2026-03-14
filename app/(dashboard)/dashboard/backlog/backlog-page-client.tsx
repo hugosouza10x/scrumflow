@@ -11,11 +11,16 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
   DialogTrigger, DialogFooter, DialogDescription,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu, DropdownMenuTrigger, DropdownMenuContent,
+  DropdownMenuItem, DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
-  ListTodo, FolderKanban, X, User, Pencil, LayoutGrid, LayoutList, ArrowRight, Sparkles, Loader2,
+  ListTodo, FolderKanban, X, User, Pencil, LayoutGrid, LayoutList, ArrowRight,
+  Sparkles, Loader2, MoreVertical, Archive, Trash2, ArchiveX,
 } from "lucide-react";
 import { STATUS_REFINAMENTO_LABEL } from "@/types";
 import type { StatusRefinamento } from "@/types";
@@ -32,6 +37,7 @@ type Demanda = {
   tipo: string | null;
   projetoId: string | null;
   convertida: boolean;
+  arquivada: boolean;
   solicitante: { id: string; nome: string } | null;
   responsavel: { id: string; nome: string } | null;
   projeto: { id: string; nome: string } | null;
@@ -174,6 +180,101 @@ function DemandaEditDialog({
   );
 }
 
+// ---- Delete Confirmation Dialog ----
+function DeleteDemandaDialog({
+  demanda,
+  onConfirm,
+  onClose,
+  isPending,
+}: {
+  demanda: Demanda;
+  onConfirm: (id: string) => void;
+  onClose: () => void;
+  isPending: boolean;
+}) {
+  return (
+    <DialogContent className="max-w-md">
+      <DialogHeader>
+        <DialogTitle>Excluir demanda</DialogTitle>
+        <DialogDescription>
+          Esta ação não pode ser desfeita. A demanda será removida permanentemente do sistema.
+        </DialogDescription>
+      </DialogHeader>
+      <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3">
+        <p className="text-sm font-medium">{demanda.titulo}</p>
+        {demanda.projeto && (
+          <p className="text-xs text-muted-foreground mt-0.5">{demanda.projeto.nome}</p>
+        )}
+      </div>
+      <DialogFooter className="gap-2">
+        <Button variant="outline" onClick={onClose}>Cancelar</Button>
+        <Button
+          variant="destructive"
+          disabled={isPending}
+          onClick={() => onConfirm(demanda.id)}
+        >
+          {isPending ? "Excluindo…" : "Excluir demanda"}
+        </Button>
+      </DialogFooter>
+    </DialogContent>
+  );
+}
+
+// ---- Demanda Actions Dropdown ----
+function DemandaActionsMenu({
+  demanda,
+  onEdit,
+  onArquivar,
+  onDesarquivar,
+  onDelete,
+}: {
+  demanda: Demanda;
+  onEdit: () => void;
+  onArquivar: () => void;
+  onDesarquivar: () => void;
+  onDelete: () => void;
+}) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          className="h-7 w-7 rounded-md flex items-center justify-center text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+          title="Ações"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <MoreVertical className="h-4 w-4" />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+        <DropdownMenuItem onClick={onEdit}>
+          <Pencil className="h-4 w-4 mr-2" />
+          Editar
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        {demanda.arquivada ? (
+          <DropdownMenuItem onClick={onDesarquivar}>
+            <ArchiveX className="h-4 w-4 mr-2" />
+            Desarquivar
+          </DropdownMenuItem>
+        ) : (
+          <DropdownMenuItem onClick={onArquivar}>
+            <Archive className="h-4 w-4 mr-2" />
+            Arquivar
+          </DropdownMenuItem>
+        )}
+        <DropdownMenuSeparator />
+        <DropdownMenuItem
+          onClick={onDelete}
+          className="text-destructive focus:text-destructive focus:bg-destructive/10"
+        >
+          <Trash2 className="h-4 w-4 mr-2" />
+          Excluir
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
 // ---- Main component ----
 export function BacklogPageClient({ projetos }: { projetos: Projeto[] }) {
   const queryClient = useQueryClient();
@@ -185,7 +286,9 @@ export function BacklogPageClient({ projetos }: { projetos: Projeto[] }) {
     const stored = localStorage.getItem(BACKLOG_VIEW_LS_KEY) as "grid" | "list" | null;
     if (stored === "list") setViewMode("list");
   }, []);
+
   const [editingDemanda, setEditingDemanda] = useState<Demanda | null>(null);
+  const [deletingDemanda, setDeletingDemanda] = useState<Demanda | null>(null);
 
   // Filtros
   const [selectedProjetoIds, setSelectedProjetoIds] = useState<string[]>([]);
@@ -193,6 +296,7 @@ export function BacklogPageClient({ projetos }: { projetos: Projeto[] }) {
   const [filtroClienteId, setFiltroClienteId] = useState("");
   const [filtroStatus, setFiltroStatus] = useState<string>("");
   const [filtroBusca, setFiltroBusca] = useState("");
+  const [mostrarArquivadas, setMostrarArquivadas] = useState(false);
 
   // Form nova demanda
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -210,6 +314,7 @@ export function BacklogPageClient({ projetos }: { projetos: Projeto[] }) {
     setViewMode(next);
     try { localStorage.setItem(BACKLOG_VIEW_LS_KEY, next); } catch {}
   };
+  void toggleViewMode; // evitar warning de unused
 
   const { data: clientes = [] } = useQuery<Cliente[]>({
     queryKey: ["clientes"],
@@ -237,23 +342,38 @@ export function BacklogPageClient({ projetos }: { projetos: Projeto[] }) {
   }, [projetos, filtroClienteId]);
 
   const demandasUrl = useMemo(() => {
-    if (mostrarGeral) return "/api/demandas?geral=true";
-    if (selectedProjetoIds.length > 0) {
-      if (selectedProjetoIds.length === 1) return `/api/demandas?projetoId=${selectedProjetoIds[0]}`;
-      return `/api/demandas?projetoIds=${selectedProjetoIds.join(",")}`;
+    const params = new URLSearchParams();
+    if (mostrarArquivadas) {
+      params.set("incluirArquivadas", "true");
+      params.set("incluirConvertidas", "true");
+    }
+
+    if (mostrarGeral) {
+      params.set("geral", "true");
+      return `/api/demandas?${params}`;
+    }
+    if (selectedProjetoIds.length === 1) {
+      params.set("projetoId", selectedProjetoIds[0]);
+      return `/api/demandas?${params}`;
+    }
+    if (selectedProjetoIds.length > 1) {
+      params.set("projetoIds", selectedProjetoIds.join(","));
+      return `/api/demandas?${params}`;
     }
     if (filtroClienteId) {
       const ids = projetosFiltradosPorCliente.map((p) => p.id);
       if (ids.length === 0) return null;
-      if (ids.length === 1) return `/api/demandas?projetoId=${ids[0]}`;
-      return `/api/demandas?projetoIds=${ids.join(",")}`;
+      if (ids.length === 1) params.set("projetoId", ids[0]);
+      else params.set("projetoIds", ids.join(","));
+      return `/api/demandas?${params}`;
     }
-    return "/api/demandas";
-  }, [mostrarGeral, selectedProjetoIds, filtroClienteId, projetosFiltradosPorCliente]);
+    const base = `/api/demandas`;
+    return params.toString() ? `${base}?${params}` : base;
+  }, [mostrarGeral, selectedProjetoIds, filtroClienteId, projetosFiltradosPorCliente, mostrarArquivadas]);
 
   const queryKey = useMemo(
-    () => ["demandas", mostrarGeral ? "geral" : selectedProjetoIds.join(","), filtroClienteId],
-    [mostrarGeral, selectedProjetoIds, filtroClienteId]
+    () => ["demandas", mostrarGeral ? "geral" : selectedProjetoIds.join(","), filtroClienteId, mostrarArquivadas],
+    [mostrarGeral, selectedProjetoIds, filtroClienteId, mostrarArquivadas]
   );
 
   const { data: demandas = [], isLoading } = useQuery({
@@ -404,6 +524,58 @@ export function BacklogPageClient({ projetos }: { projetos: Projeto[] }) {
     onSettled: () => queryClient.invalidateQueries({ queryKey }),
   });
 
+  const arquivarDemanda = useMutation({
+    mutationFn: async ({ id, arquivada }: { id: string; arquivada: boolean }) => {
+      const res = await fetch(`/api/demandas/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ arquivada }),
+      });
+      if (!res.ok) throw new Error("Erro ao arquivar demanda");
+      return res.json();
+    },
+    onMutate: async ({ id }) => {
+      await queryClient.cancelQueries({ queryKey });
+      const previous = queryClient.getQueryData<Demanda[]>(queryKey);
+      // Remove da listagem atual (seja arquivando ou desarquivando, o item sai da view ativa)
+      if (!mostrarArquivadas) {
+        queryClient.setQueryData<Demanda[]>(queryKey, (old = []) => old.filter((d) => d.id !== id));
+      }
+      return { previous };
+    },
+    onSuccess: (_data, { arquivada }) => {
+      toast.success(arquivada ? "Demanda arquivada." : "Demanda desarquivada.");
+    },
+    onError: (_err, _vars, ctx) => {
+      if (ctx?.previous) queryClient.setQueryData(queryKey, ctx.previous);
+      toast.error("Erro ao arquivar demanda.");
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey }),
+  });
+
+  const deleteDemanda = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await fetch(`/api/demandas/${id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error("Erro ao excluir demanda");
+      return res.json();
+    },
+    onMutate: async (id) => {
+      await queryClient.cancelQueries({ queryKey });
+      const previous = queryClient.getQueryData<Demanda[]>(queryKey);
+      queryClient.setQueryData<Demanda[]>(queryKey, (old = []) => old.filter((d) => d.id !== id));
+      return { previous };
+    },
+    onSuccess: () => {
+      setDeletingDemanda(null);
+      toast.success("Demanda excluída.");
+    },
+    onError: (_err, _vars, ctx) => {
+      if (ctx?.previous) queryClient.setQueryData(queryKey, ctx.previous);
+      toast.error("Erro ao excluir demanda.");
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey }),
+  });
+
   const criarCard = useMutation({
     mutationFn: async (demandaId: string) => {
       const demanda = (demandas as Demanda[]).find((d) => d.id === demandaId);
@@ -423,12 +595,26 @@ export function BacklogPageClient({ projetos }: { projetos: Projeto[] }) {
       if (!res.ok) throw new Error("Erro ao criar card");
       return res.json();
     },
+    onMutate: async (demandaId) => {
+      await queryClient.cancelQueries({ queryKey });
+      const previous = queryClient.getQueryData<Demanda[]>(queryKey);
+      // Remove a demanda do backlog ativo após converter (a demanda vira convertida=true no servidor)
+      if (!mostrarArquivadas) {
+        queryClient.setQueryData<Demanda[]>(queryKey, (old = []) =>
+          old.filter((d) => d.id !== demandaId)
+        );
+      }
+      return { previous };
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey });
       queryClient.invalidateQueries({ queryKey: ["cards", "kanban"] });
       toast.success("Card criado a partir da demanda!");
     },
-    onError: () => toast.error("Erro ao criar card."),
+    onError: (_err, _vars, ctx) => {
+      if (ctx?.previous) queryClient.setQueryData(queryKey, ctx.previous);
+      toast.error("Erro ao criar card.");
+    },
   });
 
   // ---- Helpers ----
@@ -450,6 +636,7 @@ export function BacklogPageClient({ projetos }: { projetos: Projeto[] }) {
     setSelectedProjetoIds([]);
     setFiltroClienteId("");
     setMostrarGeral(false);
+    setMostrarArquivadas(false);
   };
 
   const resetDialog = (open: boolean) => {
@@ -465,7 +652,7 @@ export function BacklogPageClient({ projetos }: { projetos: Projeto[] }) {
     }
   };
 
-  const hasFilters = filtroStatus || filtroBusca || selectedProjetoIds.length > 0 || filtroClienteId || mostrarGeral;
+  const hasFilters = filtroStatus || filtroBusca || selectedProjetoIds.length > 0 || filtroClienteId || mostrarGeral || mostrarArquivadas;
 
   // ---- Render helpers ----
   function ProjetoTag({ d }: { d: Demanda }) {
@@ -494,6 +681,18 @@ export function BacklogPageClient({ projetos }: { projetos: Projeto[] }) {
             onSave={(id, data) => updateDemanda.mutate({ id, data })}
             onClose={() => setEditingDemanda(null)}
             isPending={updateDemanda.isPending}
+          />
+        )}
+      </Dialog>
+
+      {/* Delete confirmation dialog */}
+      <Dialog open={!!deletingDemanda} onOpenChange={(v) => { if (!v) setDeletingDemanda(null); }}>
+        {deletingDemanda && (
+          <DeleteDemandaDialog
+            demanda={deletingDemanda}
+            onConfirm={(id) => deleteDemanda.mutate(id)}
+            onClose={() => setDeletingDemanda(null)}
+            isPending={deleteDemanda.isPending}
           />
         )}
       </Dialog>
@@ -742,7 +941,7 @@ export function BacklogPageClient({ projetos }: { projetos: Projeto[] }) {
         </div>
       </div>
 
-      {/* Linha 2: busca + status + view toggle */}
+      {/* Linha 2: busca + status + arquivadas + view toggle */}
       <div className="flex items-center gap-2 flex-wrap">
         <Input
           placeholder="Buscar demandas..."
@@ -760,6 +959,21 @@ export function BacklogPageClient({ projetos }: { projetos: Projeto[] }) {
             <option key={s} value={s}>{STATUS_REFINAMENTO_LABEL[s]}</option>
           ))}
         </select>
+
+        {/* Filtro arquivadas/convertidas */}
+        <button
+          onClick={() => setMostrarArquivadas((v) => !v)}
+          className={`inline-flex items-center gap-1.5 rounded-md border px-3 py-2 text-sm transition-colors ${
+            mostrarArquivadas
+              ? "bg-amber-100 border-amber-300 text-amber-800 dark:bg-amber-900/30 dark:border-amber-700 dark:text-amber-300"
+              : "bg-background hover:bg-muted text-muted-foreground"
+          }`}
+          title={mostrarArquivadas ? "Ocultar arquivadas e convertidas" : "Ver arquivadas e convertidas"}
+        >
+          <Archive className="h-3.5 w-3.5" />
+          {mostrarArquivadas ? "Ocultar arquivadas" : "Arquivadas"}
+        </button>
+
         {hasFilters && (
           <Button variant="ghost" size="sm" onClick={limparFiltros}>Limpar tudo</Button>
         )}
@@ -785,6 +999,20 @@ export function BacklogPageClient({ projetos }: { projetos: Projeto[] }) {
         </div>
       </div>
 
+      {/* Banner modo arquivadas */}
+      {mostrarArquivadas && (
+        <div className="flex items-center gap-2 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 px-4 py-2.5 text-sm text-amber-800 dark:text-amber-300">
+          <Archive className="h-4 w-4 shrink-0" />
+          <span>Exibindo demandas arquivadas e convertidas em card. Itens desta lista não estão ativos no backlog.</span>
+          <button
+            onClick={() => setMostrarArquivadas(false)}
+            className="ml-auto text-amber-600 hover:text-amber-800 dark:text-amber-400"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
+
       {/* Conteúdo */}
       {isLoading ? (
         viewMode === "grid" ? (
@@ -801,9 +1029,15 @@ export function BacklogPageClient({ projetos }: { projetos: Projeto[] }) {
       ) : demandasFiltradas.length === 0 && (demandas as Demanda[]).length === 0 ? (
         <EmptyState
           icon={ListTodo}
-          title={mostrarGeral ? "Nenhuma demanda geral" : "Nenhuma demanda"}
-          description={mostrarGeral ? "Demandas criadas sem projeto aparecerão aqui." : "Clique em Nova demanda para adicionar ao backlog."}
-          action={{ label: "Nova demanda", onClick: () => setDialogOpen(true) }}
+          title={mostrarGeral ? "Nenhuma demanda geral" : mostrarArquivadas ? "Nenhuma demanda arquivada" : "Nenhuma demanda"}
+          description={
+            mostrarGeral
+              ? "Demandas criadas sem projeto aparecerão aqui."
+              : mostrarArquivadas
+              ? "Demandas arquivadas e convertidas aparecerão aqui."
+              : "Clique em Nova demanda para adicionar ao backlog."
+          }
+          action={!mostrarArquivadas ? { label: "Nova demanda", onClick: () => setDialogOpen(true) } : undefined}
         />
       ) : demandasFiltradas.length === 0 ? (
         <EmptyState icon={ListTodo} title="Nenhuma demanda corresponde aos filtros" description="Tente ajustar os filtros." />
@@ -813,12 +1047,18 @@ export function BacklogPageClient({ projetos }: { projetos: Projeto[] }) {
           {demandasFiltradas.map((d: Demanda) => (
             <Card
               key={d.id}
-              className="group relative cursor-pointer hover:shadow-md transition-shadow"
+              className={`group relative cursor-pointer hover:shadow-md transition-shadow ${d.arquivada || d.convertida ? "opacity-70" : ""}`}
               onClick={() => setEditingDemanda(d)}
             >
-              {/* Indicador de edição */}
-              <span className="absolute top-3 right-3 h-7 w-7 rounded-md flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-muted text-muted-foreground z-10">
-                <Pencil className="h-3.5 w-3.5" />
+              {/* Menu de ações */}
+              <span className="absolute top-2 right-2 z-10" onClick={(e) => e.stopPropagation()}>
+                <DemandaActionsMenu
+                  demanda={d}
+                  onEdit={() => setEditingDemanda(d)}
+                  onArquivar={() => arquivarDemanda.mutate({ id: d.id, arquivada: true })}
+                  onDesarquivar={() => arquivarDemanda.mutate({ id: d.id, arquivada: false })}
+                  onDelete={() => setDeletingDemanda(d)}
+                />
               </span>
 
               <CardHeader className="pb-2 pr-10">
@@ -829,6 +1069,16 @@ export function BacklogPageClient({ projetos }: { projetos: Projeto[] }) {
                 <div className="flex items-center gap-2 mt-1 flex-wrap">
                   <RefinamentoBadge status={d.statusRefinamento} />
                   <ProjetoTag d={d} />
+                  {d.arquivada && (
+                    <span className="inline-flex items-center gap-1 text-[10px] font-medium text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/30 px-1.5 py-0.5 rounded shrink-0">
+                      <Archive className="h-2.5 w-2.5" />Arquivada
+                    </span>
+                  )}
+                  {d.convertida && !d.arquivada && (
+                    <span className="inline-flex items-center gap-1 text-[10px] font-medium text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded shrink-0">
+                      ✓ Convertida
+                    </span>
+                  )}
                   {d.solicitante && (
                     <span className="text-xs text-muted-foreground">por {d.solicitante.nome}</span>
                   )}
@@ -849,20 +1099,18 @@ export function BacklogPageClient({ projetos }: { projetos: Projeto[] }) {
                   className="flex gap-2 flex-wrap items-center"
                   onClick={(e) => e.stopPropagation()}
                 >
-                  <select
-                    className="rounded-md border border-input bg-background px-2 py-1 text-xs"
-                    value={d.statusRefinamento}
-                    onChange={(e) => updateStatus.mutate({ id: d.id, statusRefinamento: e.target.value })}
-                  >
-                    {STATUS_OPTIONS.map((s) => (
-                      <option key={s} value={s}>{STATUS_REFINAMENTO_LABEL[s]}</option>
-                    ))}
-                  </select>
-                  {d.convertida ? (
-                    <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400 font-medium">
-                      Convertida
-                    </span>
-                  ) : d.statusRefinamento === "PRONTO_PARA_SPRINT" && (
+                  {!d.arquivada && !d.convertida && (
+                    <select
+                      className="rounded-md border border-input bg-background px-2 py-1 text-xs"
+                      value={d.statusRefinamento}
+                      onChange={(e) => updateStatus.mutate({ id: d.id, statusRefinamento: e.target.value })}
+                    >
+                      {STATUS_OPTIONS.map((s) => (
+                        <option key={s} value={s}>{STATUS_REFINAMENTO_LABEL[s]}</option>
+                      ))}
+                    </select>
+                  )}
+                  {!d.arquivada && !d.convertida && d.statusRefinamento === "PRONTO_PARA_SPRINT" && (
                     <Button
                       size="sm"
                       variant="outline"
@@ -888,18 +1136,28 @@ export function BacklogPageClient({ projetos }: { projetos: Projeto[] }) {
             <span className="hidden sm:block w-24 text-center">Status</span>
             <span className="hidden md:block w-16 text-center">Prioridade</span>
             <span className="hidden lg:block w-28">Responsável</span>
-            <span className="w-20 text-right">Ações</span>
+            <span className="w-24 text-right">Ações</span>
           </div>
 
           {demandasFiltradas.map((d: Demanda, idx) => (
             <div
               key={d.id}
-              className={`grid grid-cols-[1fr_auto_auto_auto_auto] items-center gap-3 px-4 py-3 hover:bg-muted/40 transition-colors group cursor-pointer ${idx !== 0 ? "border-t" : ""}`}
+              className={`grid grid-cols-[1fr_auto_auto_auto_auto] items-center gap-3 px-4 py-3 hover:bg-muted/40 transition-colors group cursor-pointer ${idx !== 0 ? "border-t" : ""} ${d.arquivada || d.convertida ? "opacity-70" : ""}`}
               onClick={() => setEditingDemanda(d)}
             >
               {/* Título + meta */}
               <div className="min-w-0">
-                <p className="text-sm font-medium truncate">{d.titulo}</p>
+                <div className="flex items-center gap-2">
+                  <p className="text-sm font-medium truncate">{d.titulo}</p>
+                  {d.arquivada && (
+                    <span className="shrink-0 inline-flex items-center gap-1 text-[10px] font-medium text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/30 px-1.5 py-0.5 rounded">
+                      <Archive className="h-2.5 w-2.5" />Arquivada
+                    </span>
+                  )}
+                  {d.convertida && !d.arquivada && (
+                    <span className="shrink-0 text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400 font-medium">✓ Card</span>
+                  )}
+                </div>
                 <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                   <ProjetoTag d={d} />
                   {d.responsavel && (
@@ -917,15 +1175,19 @@ export function BacklogPageClient({ projetos }: { projetos: Projeto[] }) {
 
               {/* Status select */}
               <div className="hidden sm:block w-36" onClick={(e) => e.stopPropagation()}>
-                <select
-                  className="w-full rounded-md border border-input bg-background px-2 py-1 text-xs"
-                  value={d.statusRefinamento}
-                  onChange={(e) => updateStatus.mutate({ id: d.id, statusRefinamento: e.target.value })}
-                >
-                  {STATUS_OPTIONS.map((s) => (
-                    <option key={s} value={s}>{STATUS_REFINAMENTO_LABEL[s]}</option>
-                  ))}
-                </select>
+                {!d.arquivada && !d.convertida ? (
+                  <select
+                    className="w-full rounded-md border border-input bg-background px-2 py-1 text-xs"
+                    value={d.statusRefinamento}
+                    onChange={(e) => updateStatus.mutate({ id: d.id, statusRefinamento: e.target.value })}
+                  >
+                    {STATUS_OPTIONS.map((s) => (
+                      <option key={s} value={s}>{STATUS_REFINAMENTO_LABEL[s]}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <RefinamentoBadge status={d.statusRefinamento} />
+                )}
               </div>
 
               {/* Prioridade */}
@@ -943,12 +1205,8 @@ export function BacklogPageClient({ projetos }: { projetos: Projeto[] }) {
               </div>
 
               {/* Ações */}
-              <div className="flex items-center gap-1 justify-end w-20" onClick={(e) => e.stopPropagation()}>
-                {d.convertida ? (
-                  <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-400 dark:bg-slate-800 font-medium" title="Demanda já convertida em card">
-                    ✓ Card
-                  </span>
-                ) : d.statusRefinamento === "PRONTO_PARA_SPRINT" && (
+              <div className="flex items-center gap-1 justify-end w-24" onClick={(e) => e.stopPropagation()}>
+                {!d.arquivada && !d.convertida && d.statusRefinamento === "PRONTO_PARA_SPRINT" && (
                   <Button
                     size="sm"
                     variant="outline"
@@ -960,13 +1218,13 @@ export function BacklogPageClient({ projetos }: { projetos: Projeto[] }) {
                     <ArrowRight className="h-3.5 w-3.5" />
                   </Button>
                 )}
-                <button
-                  className="h-7 w-7 rounded-md flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:bg-muted hover:text-foreground"
-                  title="Editar demanda"
-                  onClick={() => setEditingDemanda(d)}
-                >
-                  <Pencil className="h-3.5 w-3.5" />
-                </button>
+                <DemandaActionsMenu
+                  demanda={d}
+                  onEdit={() => setEditingDemanda(d)}
+                  onArquivar={() => arquivarDemanda.mutate({ id: d.id, arquivada: true })}
+                  onDesarquivar={() => arquivarDemanda.mutate({ id: d.id, arquivada: false })}
+                  onDelete={() => setDeletingDemanda(d)}
+                />
               </div>
             </div>
           ))}

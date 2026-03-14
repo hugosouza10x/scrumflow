@@ -20,6 +20,8 @@ export async function GET(request: NextRequest) {
   const projetoIds = projetoIdsParam ? projetoIdsParam.split(",").filter(Boolean) : undefined;
   const statusRefinamento = searchParams.get("statusRefinamento") ?? undefined;
   const geral = searchParams.get("geral") === "true";
+  const incluirArquivadas = searchParams.get("incluirArquivadas") === "true";
+  const incluirConvertidas = searchParams.get("incluirConvertidas") === "true";
 
   try {
     // Filtrar demandas pelos projetos acessíveis ao usuário
@@ -34,7 +36,7 @@ export async function GET(request: NextRequest) {
           : (accessibleIds as string[]);
 
     const demandas = await demandaService.list(
-      { projetoId, projetoIds: effectiveProjetoIds, statusRefinamento, geral }
+      { projetoId, projetoIds: effectiveProjetoIds, statusRefinamento, geral, incluirArquivadas, incluirConvertidas }
     );
     return NextResponse.json(demandas);
   } catch (e) {

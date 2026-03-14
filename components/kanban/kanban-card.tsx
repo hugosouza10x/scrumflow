@@ -2,9 +2,20 @@
 
 import { useDraggable } from "@dnd-kit/core";
 import Link from "next/link";
-import { CalendarDays, CheckSquare, Pencil, Clock, Zap, Layers, ShieldAlert } from "lucide-react";
+import { CalendarDays, CheckSquare, Pencil, Clock, Zap, Layers, ShieldAlert, MoreVertical, Archive, Trash2 } from "lucide-react";
 import { useState } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { PrioridadeBadge } from "@/components/ui/status-badge";
+import {
+  DropdownMenu, DropdownMenuTrigger, DropdownMenuContent,
+  DropdownMenuItem, DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle,
+  DialogFooter, DialogDescription,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
 import { KanbanCardQuickEdit } from "./kanban-card-quick-edit";
 import type { CardForKanban, ClienteInfo, TeamMember } from "./kanban-board";
 import type { KanbanCardFields } from "./use-kanban-card-fields";
@@ -82,6 +93,39 @@ export function KanbanCard({
   });
 
   const [quickEditOpen, setQuickEditOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const queryClient = useQueryClient();
+
+  const arquivarCard = useMutation({
+    mutationFn: async () => {
+      const res = await fetch(`/api/cards/${card.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ arquivado: true }),
+      });
+      if (!res.ok) throw new Error("Erro ao arquivar card");
+      return res.json();
+    },
+    onSuccess: () => {
+      toast.success("Card arquivado.");
+      queryClient.invalidateQueries({ queryKey: ["cards"] });
+    },
+    onError: () => toast.error("Erro ao arquivar card."),
+  });
+
+  const deleteCard = useMutation({
+    mutationFn: async () => {
+      const res = await fetch(`/api/cards/${card.id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error("Erro ao excluir card");
+      return res.json();
+    },
+    onSuccess: () => {
+      setDeleteOpen(false);
+      toast.success("Card excluído.");
+      queryClient.invalidateQueries({ queryKey: ["cards"] });
+    },
+    onError: () => toast.error("Erro ao excluir card."),
+  });
 
   const isOverdue =
     card.prazo && !["CONCLUIDO", "CANCELADO"].includes(card.status)
@@ -129,20 +173,54 @@ export function KanbanCard({
           .filter(Boolean)
           .join(" ")}
       >
-        {/* Hover action bar — edição rápida (apenas cards) */}
+        {/* Hover action bar — menu de ações (apenas cards) */}
         {!isOverlay && !isDemanda && (
-          <button
-            className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity h-6 w-6 rounded flex items-center justify-center bg-muted hover:bg-muted-foreground/20 text-muted-foreground hover:text-foreground z-10"
-            title="Editar card"
-            onClick={(e) => {
-              e.stopPropagation();
-              e.preventDefault();
-              setQuickEditOpen(true);
-            }}
+          <div
+            className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-0.5 z-10"
             onPointerDown={(e) => e.stopPropagation()}
           >
-            <Pencil className="h-3 w-3" />
-          </button>
+            <button
+              className="h-6 w-6 rounded flex items-center justify-center bg-muted hover:bg-muted-foreground/20 text-muted-foreground hover:text-foreground"
+              title="Edição rápida"
+              onClick={(e) => {
+                e.stopPropagation();
+                e.preventDefault();
+                setQuickEditOpen(true);
+              }}
+            >
+              <Pencil className="h-3 w-3" />
+            </button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  className="h-6 w-6 rounded flex items-center justify-center bg-muted hover:bg-muted-foreground/20 text-muted-foreground hover:text-foreground"
+                  title="Mais ações"
+                  onClick={(e) => { e.stopPropagation(); e.preventDefault(); }}
+                >
+                  <MoreVertical className="h-3 w-3" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+                <DropdownMenuItem onClick={(e) => { e.stopPropagation(); setQuickEditOpen(true); }}>
+                  <Pencil className="h-4 w-4 mr-2" />
+                  Editar
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={(e) => { e.stopPropagation(); arquivarCard.mutate(); }}>
+                  <Archive className="h-4 w-4 mr-2" />
+                  Arquivar
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onClick={(e) => { e.stopPropagation(); setDeleteOpen(true); }}
+                  className="text-destructive focus:text-destructive focus:bg-destructive/10"
+                >
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Excluir
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         )}
 
         {/* Linha de contexto: cliente + projeto + épico */}
@@ -278,6 +356,36 @@ export function KanbanCard({
           open={quickEditOpen}
           onOpenChange={setQuickEditOpen}
         />
+      )}
+
+      {/* Delete Confirmation Dialog */}
+      {!isOverlay && !isDemanda && (
+        <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Excluir card</DialogTitle>
+              <DialogDescription>
+                Esta ação não pode ser desfeita. O card será removido permanentemente do sistema, incluindo subtarefas, comentários e histórico.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3">
+              <p className="text-sm font-medium">{card.titulo}</p>
+              {card.projeto && (
+                <p className="text-xs text-muted-foreground mt-0.5">{card.projeto.nome}</p>
+              )}
+            </div>
+            <DialogFooter className="gap-2">
+              <Button variant="outline" onClick={() => setDeleteOpen(false)}>Cancelar</Button>
+              <Button
+                variant="destructive"
+                disabled={deleteCard.isPending}
+                onClick={() => deleteCard.mutate()}
+              >
+                {deleteCard.isPending ? "Excluindo…" : "Excluir card"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       )}
     </>
   );

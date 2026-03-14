@@ -25,6 +25,7 @@ export async function GET(request: NextRequest) {
   const limitParam = searchParams.get("limit");
   const cursor = searchParams.get("cursor") ?? undefined;
   const limit = limitParam ? Math.min(parseInt(limitParam, 10), 200) : undefined;
+  const incluirArquivados = searchParams.get("incluirArquivados") === "true";
 
   try {
     const accessibleIds = await getAccessibleProjectIds(session.id, session.cargo.slug);
@@ -44,6 +45,7 @@ export async function GET(request: NextRequest) {
         clienteId,
         sprintId,
         status,
+        incluirArquivados: incluirArquivados || undefined,
       },
       limit ? { limit, cursor } : undefined
     );

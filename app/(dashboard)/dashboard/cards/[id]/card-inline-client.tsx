@@ -18,8 +18,17 @@ import { AiButton } from "@/components/ui/ai-button";
 import {
   AlertCircle, Pencil, Check, X, Loader2, ChevronDown,
   Calendar, User, Zap, Hash, ShieldAlert, History,
-  Paperclip, Clock, FolderOpen, MessageSquare,
+  Paperclip, Clock, FolderOpen, MessageSquare, Archive, Trash2, MoreVertical,
 } from "lucide-react";
+import { useRouter } from "next/navigation";
+import {
+  DropdownMenu, DropdownMenuTrigger, DropdownMenuContent,
+  DropdownMenuItem, DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle,
+  DialogFooter, DialogDescription,
+} from "@/components/ui/dialog";
 import { CARD_STATUS_LABEL, PRIORIDADE_LABEL } from "@/types";
 import type { CardStatus, Prioridade } from "@/types";
 import { CardComentarios } from "./card-comentarios";
@@ -371,11 +380,15 @@ export function CardInlineClient({
   usuarios: Usuario[];
   sprints: Sprint[];
 }) {
+  const router = useRouter();
   const [card, setCard] = useState<CardDetail>(initialCard);
   const [savingField, setSavingField] = useState<string | null>(null);
   const [editingField, setEditingField] = useState<string | null>(null);
   const [aiLoading, setAiLoading] = useState<"descricao" | "criterios" | null>(null);
   const [responsaveisDropdownOpen, setResponsaveisDropdownOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [isArchiving, setIsArchiving] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const [titleDraft, setTitleDraft] = useState(initialCard.titulo);
   const [descDraft, setDescDraft] = useState(initialCard.descricao ?? "");
@@ -450,6 +463,41 @@ export function CardInlineClient({
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [card.id, card.subtarefas]
   );
+
+  // ─── Archive / Delete ───────────────────────────────────────────────────────
+
+  async function handleArquivar() {
+    setIsArchiving(true);
+    try {
+      const res = await fetch(`/api/cards/${card.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ arquivado: true }),
+      });
+      if (!res.ok) throw new Error("Erro ao arquivar");
+      toast.success("Card arquivado.");
+      router.push("/dashboard/kanban");
+    } catch {
+      toast.error("Erro ao arquivar card.");
+    } finally {
+      setIsArchiving(false);
+    }
+  }
+
+  async function handleDelete() {
+    setIsDeleting(true);
+    try {
+      const res = await fetch(`/api/cards/${card.id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error("Erro ao excluir");
+      toast.success("Card excluído.");
+      router.push("/dashboard/kanban");
+    } catch {
+      toast.error("Erro ao excluir card.");
+    } finally {
+      setIsDeleting(false);
+      setDeleteOpen(false);
+    }
+  }
 
   // ─── AI ─────────────────────────────────────────────────────────────────────
 
@@ -526,7 +574,35 @@ export function CardInlineClient({
   return (
     <div className="space-y-5 max-w-6xl">
 
-      {/* ── Breadcrumb ─────────────────────────────────────────────────────── */}
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Excluir card</DialogTitle>
+            <DialogDescription>
+              Esta ação não pode ser desfeita. O card será removido permanentemente, incluindo subtarefas, comentários e histórico.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3">
+            <p className="text-sm font-medium">{card.titulo}</p>
+            {card.projeto && (
+              <p className="text-xs text-muted-foreground mt-0.5">{card.projeto.nome}</p>
+            )}
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setDeleteOpen(false)}>Cancelar</Button>
+            <Button
+              variant="destructive"
+              disabled={isDeleting}
+              onClick={handleDelete}
+            >
+              {isDeleting ? "Excluindo…" : "Excluir card"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Breadcrumb + Actions ─────────────────────────────────────────────── */}
       <div className="flex items-center gap-2 text-sm text-muted-foreground">
         {card.projeto ? (
           <>
@@ -547,6 +623,37 @@ export function CardInlineClient({
           </>
         )}
         <span className="text-foreground/60 truncate">Detalhes do card</span>
+
+        {/* Card lifecycle actions */}
+        <div className="ml-auto flex items-center gap-1">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-8 gap-1.5 text-muted-foreground hover:text-foreground"
+            onClick={handleArquivar}
+            disabled={isArchiving}
+            title="Arquivar este card (remove do kanban, preserva histórico)"
+          >
+            {isArchiving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Archive className="h-3.5 w-3.5" />}
+            <span className="hidden sm:inline">Arquivar</span>
+          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground">
+                <MoreVertical className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem
+                onClick={() => setDeleteOpen(true)}
+                className="text-destructive focus:text-destructive focus:bg-destructive/10"
+              >
+                <Trash2 className="h-4 w-4 mr-2" />
+                Excluir card
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
       </div>
 
       {/* ── Title ──────────────────────────────────────────────────────────── */}

@@ -68,6 +68,7 @@ export const updateCardSchema = z.object({
   motivoBloqueio: z.string().nullable().optional(),
   bloqueadoPorId: z.string().nullable().optional(),
   etiquetasIds: z.array(z.string()).optional(),
+  arquivado: z.boolean().optional(),
 });
 
 export type CreateCardInput = z.infer<typeof createCardSchema>;

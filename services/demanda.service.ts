@@ -14,8 +14,18 @@ export const demandaService = {
     projetoIds?: string[];
     geral?: boolean; // apenas demandas sem projeto (projetoId = null)
     statusRefinamento?: string;
+    incluirConvertidas?: boolean; // se true, exibe demandas já convertidas em card
+    incluirArquivadas?: boolean;  // se true, exibe demandas arquivadas
   }) {
     const prismaWhere: Prisma.DemandaWhereInput = {};
+
+    // Por padrão, exclui convertidas e arquivadas do backlog ativo
+    if (!where?.incluirConvertidas) {
+      prismaWhere.convertida = false;
+    }
+    if (!where?.incluirArquivadas) {
+      prismaWhere.arquivada = false;
+    }
 
     if (where?.statusRefinamento) {
       prismaWhere.statusRefinamento = where.statusRefinamento as Prisma.EnumStatusRefinamentoFilter | undefined;
@@ -75,6 +85,10 @@ export const demandaService = {
         ...(data.prioridade && { prioridade: data.prioridade }),
         ...(data.tipo !== undefined && { tipo: data.tipo }),
         ...(data.responsavelId !== undefined && { responsavelId: data.responsavelId }),
+        ...(data.arquivada !== undefined && {
+          arquivada: data.arquivada,
+          arquivadaEm: data.arquivada ? new Date() : null,
+        }),
       },
       include: includeDefault,
     });

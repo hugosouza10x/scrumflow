@@ -26,10 +26,17 @@ export const cardService = {
       clienteId?: string;
       sprintId?: string | null;
       status?: string;
+      incluirArquivados?: boolean;
     },
     pagination?: { limit?: number; cursor?: string }
   ) {
     const prismaWhere: Record<string, unknown> = {};
+
+    // Por padrão, exclui cards arquivados da listagem operacional
+    if (!where?.incluirArquivados) {
+      prismaWhere.arquivado = false;
+    }
+
     if (where?.projetoIds?.length && where?.avulsas) {
       prismaWhere.OR = [
         { projetoId: { in: where.projetoIds } },
@@ -185,6 +192,10 @@ export const cardService = {
       }),
       ...(data.bloqueadoPorId !== undefined && data.bloqueado !== false && { bloqueadoPorId: data.bloqueadoPorId }),
       ...(data.motivoBloqueio !== undefined && { motivoBloqueio: data.motivoBloqueio }),
+      ...(data.arquivado !== undefined && {
+        arquivado: data.arquivado,
+        arquivadoEm: data.arquivado ? new Date() : null,
+      }),
     };
 
     if (userId) {

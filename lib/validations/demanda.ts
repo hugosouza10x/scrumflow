@@ -22,6 +22,7 @@ export const updateDemandaSchema = z.object({
   prioridade: prioridadeEnum.optional(),
   tipo: z.string().optional(),
   responsavelId: z.string().nullable().optional(),
+  arquivada: z.boolean().optional(),
 });
 
 export type CreateDemandaInput = z.infer<typeof createDemandaSchema>;

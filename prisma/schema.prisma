@@ -1,0 +1,493 @@
+// ScrumFlow - Schema Prisma
+// Banco: Supabase (PostgreSQL)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// npx prisma db seed
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============== USUÁRIOS E CARGOS ==============
+
+model Cargo {
+  id        String   @id @default(cuid())
+  nome      String
+  slug      String   @unique // admin, gestor, tech_lead, desenvolvedor, analista
+  createdAt DateTime @default(now())
+  users     User[]
+}
+
+model User {
+  id            String    @id @default(cuid())
+  nome          String
+  email         String    @unique
+  passwordHash  String    @map("password_hash")
+  cargoId       String    @map("cargo_id")
+  status        UserStatus @default(ATIVO)
+  lastSeenAt    DateTime? @map("last_seen_at")
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  cargo            Cargo    @relation(fields: [cargoId], references: [id], onDelete: Restrict)
+  projetosLiderados Projeto[] @relation("ProjetoLider")
+  projetosEquipe   ProjetoMembro[]
+  demandasSolicitadas  Demanda[] @relation("DemandaSolicitante")
+  demandasResponsavel  Demanda[] @relation("DemandaResponsavel")
+  cardsResponsavel      Card[]
+  cardsCoresponsavel    CardResponsavel[]
+  subtarefasResponsavel Subtarefa[]
+  sprintMembro     SprintMembro[]
+  cardComentarios  CardComentario[]
+  cardHistoricos   CardHistorico[]
+  cardAnexos       CardAnexo[]
+  updatesDiarios   UpdateDiario[]
+  notificacoes     Notificacao[]
+  notificacoesEnviadas Notificacao[] @relation("NotificacaoRemetente")
+  comentarioReacoes ComentarioReacao[]
+}
+
+enum UserStatus {
+  ATIVO
+  INATIVO
+}
+
+// ============== CLIENTES ==============
+
+model Cliente {
+  id        String   @id @default(cuid())
+  nome      String
+  email     String?
+  telefone  String?
+  cor       String?  // hex ex: "#3b82f6" — cor visual no sistema
+  ativo     Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  projetos  Projeto[]
+  cards     Card[]   // tarefas avulsas vinculadas diretamente ao cliente
+
+  @@map("cliente")
+}
+
+// ============== PROJETOS ==============
+
+model Projeto {
+  id            String        @id @default(cuid())
+  nome          String
+  descricao     String?
+  status        ProjetoStatus  @default(ATIVO)
+  prioridade    Prioridade     @default(MEDIA)
+  clienteId     String?       @map("cliente_id")
+  liderId       String?       @map("lider_id")
+  dataInicio    DateTime?     @map("data_inicio") @db.Date
+  dataPrevisao  DateTime?     @map("data_previsao") @db.Date
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  cliente      Cliente?       @relation(fields: [clienteId], references: [id], onDelete: SetNull)
+  lider        User?          @relation("ProjetoLider", fields: [liderId], references: [id], onDelete: SetNull)
+  membros      ProjetoMembro[]
+  demandas     Demanda[]
+  sprints      Sprint[]
+  cards        Card[]
+  etiquetas    Etiqueta[]
+  epicos       Epico[]
+}
+
+model ProjetoMembro {
+  id        String   @id @default(cuid())
+  projetoId String   @map("projeto_id")
+  userId    String   @map("user_id")
+  createdAt DateTime @default(now())
+
+  projeto Projeto @relation(fields: [projetoId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([projetoId, userId])
+  @@map("projeto_membro")
+}
+
+enum ProjetoStatus {
+  ATIVO
+  PAUSADO
+  CONCLUIDO
+  CANCELADO
+}
+
+// ============== BACKLOG (DEMANDAS) ==============
+
+model Demanda {
+  id                String             @id @default(cuid())
+  titulo            String
+  descricao         String?
+  solicitanteId     String?            @map("solicitante_id")
+  responsavelId     String?            @map("responsavel_id")
+  origem            String?
+  impacto           String?
+  prioridade        Prioridade         @default(MEDIA)
+  tipo              String?            // bug, feature, etc.
+  statusRefinamento StatusRefinamento @default(NAO_REFINADO) @map("status_refinamento")
+  projetoId         String?            @map("projeto_id")
+  convertida        Boolean            @default(false) // true quando virou card
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+
+  solicitante User?    @relation("DemandaSolicitante", fields: [solicitanteId], references: [id], onDelete: SetNull)
+  responsavel User?    @relation("DemandaResponsavel", fields: [responsavelId], references: [id], onDelete: SetNull)
+  projeto     Projeto? @relation(fields: [projetoId], references: [id], onDelete: SetNull)
+  cards       Card[]   @relation("CardDemanda")
+
+  @@index([projetoId])
+  @@index([statusRefinamento])
+  @@index([responsavelId])
+}
+
+enum StatusRefinamento {
+  NAO_REFINADO
+  EM_REFINAMENTO
+  PRONTO_PARA_SPRINT
+}
+
+// ============== SPRINT ==============
+
+model Sprint {
+  id                String      @id @default(cuid())
+  nome              String
+  objetivo          String?
+  dataInicio        DateTime    @map("data_inicio") @db.Date
+  dataFim           DateTime    @map("data_fim") @db.Date
+  capacidadeTotal   Int?        @map("capacidade_total") // pontos ou horas
+  status            SprintStatus @default(PLANEJADA)
+  projetoId         String      @map("projeto_id")
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+
+  projeto Projeto        @relation(fields: [projetoId], references: [id], onDelete: Cascade)
+  membros SprintMembro[]
+  cards   Card[]
+
+  @@index([projetoId])
+  @@index([status])
+}
+
+model SprintMembro {
+  id       String   @id @default(cuid())
+  sprintId String   @map("sprint_id")
+  userId   String   @map("user_id")
+  capacidade Int?   // pontos/horas do membro nesta sprint
+  createdAt DateTime @default(now())
+
+  sprint Sprint @relation(fields: [sprintId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([sprintId, userId])
+  @@map("sprint_membro")
+}
+
+enum SprintStatus {
+  PLANEJADA
+  EM_ANDAMENTO
+  CONCLUIDA
+  CANCELADA
+}
+
+// ============== CARDS ==============
+
+model Card {
+  id              String     @id @default(cuid())
+  titulo          String
+  descricao       String?
+  criteriosAceite String?    @map("criterios_aceite") @db.Text
+  responsavelId   String?    @map("responsavel_id")
+  prioridade      Prioridade @default(MEDIA)
+  estimativa      Int?       // pontos ou horas
+  prazo           DateTime?  @db.Date
+  status          CardStatus @default(BACKLOG)
+  sprintId        String?    @map("sprint_id")
+  projetoId       String?    @map("projeto_id")
+  clienteId       String?    @map("cliente_id") // para tarefas avulsas com cliente específico
+  epicoId         String?    @map("epico_id")
+  bloqueado       Boolean    @default(false)
+  motivoBloqueio  String?    @map("motivo_bloqueio") @db.Text
+  bloqueadoPorId  String?    @map("bloqueado_por_id")
+  demandaId       String?    @map("demanda_id") // demanda de origem (rastreabilidade)
+  ultimaAtualizacao DateTime? @map("ultima_atualizacao") // para regra "sem atualização > 2 dias"
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  responsavel   User?    @relation(fields: [responsavelId], references: [id], onDelete: SetNull)
+  demanda       Demanda? @relation("CardDemanda", fields: [demandaId], references: [id], onDelete: SetNull)
+  sprint        Sprint?  @relation(fields: [sprintId], references: [id], onDelete: SetNull)
+  projeto       Projeto? @relation(fields: [projetoId], references: [id], onDelete: Cascade)
+  cliente       Cliente? @relation(fields: [clienteId], references: [id], onDelete: SetNull)
+  epico         Epico?   @relation(fields: [epicoId], references: [id], onDelete: SetNull)
+  bloqueadoPor  Card?    @relation("CardBloqueio", fields: [bloqueadoPorId], references: [id], onDelete: SetNull)
+  bloqueadorDe  Card[]   @relation("CardBloqueio")
+  responsaveis  CardResponsavel[]
+  subtarefas    Subtarefa[]
+  dependencias  CardDependencia[] @relation("CardDependenciaDe")
+  dependentes   CardDependencia[] @relation("CardDependenteDe")
+  comentarios   CardComentario[]
+  historicos    CardHistorico[]
+  anexos        CardAnexo[]
+  etiquetas     CardEtiqueta[]
+  notificacoes  Notificacao[]
+
+  @@index([projetoId])
+  @@index([sprintId])
+  @@index([responsavelId])
+  @@index([status])
+  @@index([projetoId, status])
+  @@index([clienteId])
+  @@index([epicoId])
+  @@index([bloqueadoPorId])
+}
+
+model CardDependencia {
+  id          String @id @default(cuid())
+  cardId      String @map("card_id")
+  dependenciaId String @map("dependencia_id")
+  createdAt   DateTime @default(now())
+
+  card        Card @relation("CardDependenciaDe", fields: [cardId], references: [id], onDelete: Cascade)
+  dependencia Card @relation("CardDependenteDe", fields: [dependenciaId], references: [id], onDelete: Cascade)
+
+  @@unique([cardId, dependenciaId])
+  @@map("card_dependencia")
+}
+
+model CardResponsavel {
+  cardId  String @map("card_id")
+  userId  String @map("user_id")
+
+  card  Card @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  user  User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([cardId, userId])
+  @@map("card_responsavel")
+}
+
+enum CardStatus {
+  BACKLOG
+  PRONTO_PARA_SPRINT
+  A_FAZER
+  EM_ANDAMENTO
+  EM_REVISAO
+  BLOQUEADO
+  HOMOLOGACAO
+  CONCLUIDO
+  CANCELADO
+}
+
+// ============== SUBTAREFAS ==============
+
+model Subtarefa {
+  id          String   @id @default(cuid())
+  titulo      String
+  responsavelId String? @map("responsavel_id")
+  status      SubtarefaStatus @default(PENDENTE)
+  prazo       DateTime? @db.Date
+  estimativa  Int?     // horas ou pontos
+  cardId      String   @map("card_id")
+  ordem       Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  responsavel User? @relation(fields: [responsavelId], references: [id], onDelete: SetNull)
+  card        Card  @relation(fields: [cardId], references: [id], onDelete: Cascade)
+
+  @@index([cardId])
+  @@index([responsavelId])
+}
+
+enum SubtarefaStatus {
+  PENDENTE
+  EM_ANDAMENTO
+  CONCLUIDA
+  CANCELADA
+}
+
+// ============== COMENTÁRIOS E HISTÓRICO ==============
+
+model CardComentario {
+  id         String    @id @default(cuid())
+  conteudo   String    @db.Text
+  userId     String    @map("user_id")
+  cardId     String    @map("card_id")
+  editadoEm  DateTime? @map("editado_em")
+  deletadoEm DateTime? @map("deletado_em") // soft delete
+  createdAt  DateTime  @default(now())
+
+  user     User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  card     Card                  @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  reacoes  ComentarioReacao[]
+
+  @@index([cardId])
+}
+
+model ComentarioReacao {
+  id           String @id @default(cuid())
+  comentarioId String @map("comentario_id")
+  userId       String @map("user_id")
+  emoji        String // "👍" | "❤️" | "🎉" | "😄" | "😕" | "👀"
+
+  comentario CardComentario @relation(fields: [comentarioId], references: [id], onDelete: Cascade)
+  user       User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([comentarioId, userId, emoji])
+  @@index([comentarioId])
+  @@map("comentario_reacao")
+}
+
+model CardHistorico {
+  id        String   @id @default(cuid())
+  cardId    String   @map("card_id")
+  userId    String   @map("user_id")
+  campo     String?
+  valorAnterior String? @map("valor_anterior") @db.Text
+  valorNovo String?  @map("valor_novo") @db.Text
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  card Card @relation(fields: [cardId], references: [id], onDelete: Cascade)
+
+  @@index([cardId])
+  @@map("card_historico")
+}
+
+// ============== ANEXOS ==============
+
+model CardAnexo {
+  id        String   @id @default(cuid())
+  nome      String
+  tipo      String   // MIME type
+  tamanho   Int      // bytes
+  key       String   // chave no S3 (path)
+  cardId    String   @map("card_id")
+  userId    String   @map("user_id")
+  createdAt DateTime @default(now())
+
+  card Card @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([cardId])
+  @@map("card_anexo")
+}
+
+// ============== UPDATES DIÁRIOS ==============
+
+model UpdateDiario {
+  id            String   @id @default(cuid())
+  userId        String   @map("user_id")
+  data          DateTime @db.Date
+  trabalheiHoje String?  @map("trabalhei_hoje") @db.Text
+  concluido     String?  @db.Text
+  proximoPasso  String?  @map("proximo_passo") @db.Text
+  bloqueio      Boolean  @default(false)
+  createdAt     DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, data])
+  @@index([userId])
+  @@map("update_diario")
+}
+
+// ============== ETIQUETAS ==============
+
+model Etiqueta {
+  id        String   @id @default(cuid())
+  nome      String
+  cor       String   @default("#6366f1")
+  projetoId String?  @map("projeto_id")
+  createdAt DateTime @default(now())
+
+  projeto Projeto?    @relation(fields: [projetoId], references: [id], onDelete: Cascade)
+  cards  CardEtiqueta[]
+}
+
+model CardEtiqueta {
+  id         String   @id @default(cuid())
+  cardId     String   @map("card_id")
+  etiquetaId String   @map("etiqueta_id")
+  createdAt  DateTime @default(now())
+
+  card     Card     @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  etiqueta Etiqueta @relation(fields: [etiquetaId], references: [id], onDelete: Cascade)
+
+  @@unique([cardId, etiquetaId])
+  @@map("card_etiqueta")
+}
+
+// ============== ÉPICOS ==============
+
+model Epico {
+  id          String      @id @default(cuid())
+  nome        String
+  descricao   String?     @db.Text
+  status      EpicoStatus @default(ABERTO)
+  projetoId   String      @map("projeto_id")
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  projeto Projeto @relation(fields: [projetoId], references: [id], onDelete: Cascade)
+  cards   Card[]
+
+  @@index([projetoId])
+}
+
+enum EpicoStatus {
+  ABERTO
+  EM_ANDAMENTO
+  CONCLUIDO
+  CANCELADO
+}
+
+// ============== TEMPLATES DE DEMANDA ==============
+
+model CardTemplate {
+  id                  String   @id @default(cuid())
+  nome                String
+  slug                String   @unique // bug, nova_feature, melhoria, infraestrutura
+  subtarefasSugeridas  Json?    @map("subtarefas_sugeridas") // array de { titulo: string }
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@map("card_template")
+}
+
+// ============== NOTIFICAÇÕES ==============
+
+model Notificacao {
+  id          String   @id @default(cuid())
+  userId      String   @map("user_id")
+  tipo        String   // MENCAO | ATRIBUICAO | COMENTARIO | BLOQUEADO
+  titulo      String
+  mensagem    String?  @db.Text
+  lida        Boolean  @default(false)
+  cardId      String?  @map("card_id")
+  remetenteId String?  @map("remetente_id")
+  createdAt   DateTime @default(now())
+
+  user      User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  card      Card? @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  remetente User? @relation("NotificacaoRemetente", fields: [remetenteId], references: [id], onDelete: SetNull)
+
+  @@index([userId, lida])
+  @@index([userId, createdAt])
+  @@map("notificacao")
+}
+
+// ============== ENUMS COMPARTILHADOS ==============
+
+enum Prioridade {
+  BAIXA
+  MEDIA
+  ALTA
+  URGENTE
+}

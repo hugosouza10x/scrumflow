@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "ScrumFlow (Next.js)",
+      "runtimeExecutable": "cmd",
+      "runtimeArgs": ["/c", "npm", "run", "dev"],
+      "port": 3000
+    },
+    {
+      "name": "Prisma Studio",
+      "runtimeExecutable": "cmd",
+      "runtimeArgs": ["/c", "npm", "run", "db:studio"],
+      "port": 5555
+    }
+  ]
+}

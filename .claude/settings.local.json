@@ -2,7 +2,9 @@
   "permissions": {
     "allow": [
       "Bash(xargs grep -l \"useQuery\\\\|useMutation\")",
-      "Bash(ls -la \"app/\\(dashboard\\)/layout.tsx\")"
+      "Bash(ls -la \"app/\\(dashboard\\)/layout.tsx\")",
+      "Bash(find '/c/Users/hugos/OneDrive/Documentos/Aplicativos web/scrumflow/components' -type f -name *.tsx -o -name *.ts)",
+      "Bash(grep -E \"\\\\.\\(tsx|ts\\)$\")"
     ]
   }
 }

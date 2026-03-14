@@ -203,6 +203,7 @@ export function BacklogPageClient({ projetos }: { projetos: Projeto[] }) {
   const [aiFilledFields, setAiFilledFields] = useState(false);
   const [aiPrompt, setAiPrompt] = useState("");
   const [aiLoading, setAiLoading] = useState(false);
+  const [aiOpen, setAiOpen] = useState(false);
 
   const toggleViewMode = () => {
     const next = viewMode === "grid" ? "list" : "grid";
@@ -458,6 +459,7 @@ export function BacklogPageClient({ projetos }: { projetos: Projeto[] }) {
       setNovaPrioridade("MEDIA");
       setAiFilledFields(false);
       setAiPrompt("");
+      setAiOpen(false);
       setNovaResponsavelId("");
       setNovaProjetoId("");
     }
@@ -563,151 +565,155 @@ export function BacklogPageClient({ projetos }: { projetos: Projeto[] }) {
               </DialogHeader>
 
               {/* Body scrollável */}
-              <div className="flex-1 overflow-y-auto px-6 py-5 space-y-6">
-                {/* AI Bar */}
-                <div className="rounded-lg border border-violet-200 dark:border-violet-800 bg-violet-50/60 dark:bg-violet-950/25 p-3 space-y-2">
-                  <div className="flex items-center gap-1.5">
-                    <Sparkles className="h-3.5 w-3.5 text-violet-600 dark:text-violet-400" />
-                    <span className="text-xs font-semibold text-violet-700 dark:text-violet-400 uppercase tracking-wide">Gerar com IA</span>
-                    <span className="text-[10px] text-muted-foreground ml-1">(opcional)</span>
+              <div className="flex-1 overflow-y-auto px-6 py-6 space-y-5">
+
+                {/* ── Título ── */}
+                <div>
+                  <div className="flex items-center gap-2 mb-1.5">
+                    <Label htmlFor="titulo">Título *</Label>
+                    {aiFilledFields && (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-medium bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-400 px-1.5 py-0.5 rounded">
+                        <Sparkles className="h-2.5 w-2.5" />IA
+                      </span>
+                    )}
                   </div>
-                  <div className="flex gap-2">
-                    <Input
-                      placeholder="Descreva livremente… ex: 'corrigir bug no login com email contendo +'"
-                      value={aiPrompt}
-                      onChange={(e) => setAiPrompt(e.target.value)}
-                      onKeyDown={(e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) handleAiGenerate(); }}
-                      className="h-9 text-sm"
-                    />
-                    <Button
+                  <Input
+                    id="titulo"
+                    value={form.titulo}
+                    onChange={(e) => setForm((f) => ({ ...f, titulo: e.target.value }))}
+                    className="h-11 text-base"
+                    placeholder="Título da demanda…"
+                    autoFocus
+                  />
+                </div>
+
+                {/* ── Descrição ── */}
+                <div>
+                  <Label htmlFor="descricao-nova" className="mb-1.5 block">Descrição</Label>
+                  <textarea
+                    id="descricao-nova"
+                    className="flex min-h-[100px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm resize-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    value={form.descricao}
+                    onChange={(e) => setForm((f) => ({ ...f, descricao: e.target.value }))}
+                    placeholder="Contexto adicional, links, detalhes técnicos…"
+                  />
+                </div>
+
+                {/* ── IA auxiliar ── */}
+                <div>
+                  <div className="flex justify-end">
+                    <button
                       type="button"
-                      size="sm"
-                      variant="secondary"
-                      onClick={handleAiGenerate}
-                      disabled={aiLoading || !aiPrompt.trim()}
-                      className="shrink-0"
+                      onClick={() => setAiOpen((v) => !v)}
+                      className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-violet-600 dark:hover:text-violet-400 transition-colors"
                     >
-                      {aiLoading
-                        ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                        : <Sparkles className="h-3.5 w-3.5" />}
-                      <span className="ml-1.5">{aiLoading ? "Gerando…" : "Gerar"}</span>
-                    </Button>
+                      <Sparkles className="h-3 w-3" />
+                      {aiOpen ? "Fechar IA" : "Gerar com IA"}
+                    </button>
                   </div>
-                  <p className="text-[10px] text-muted-foreground">Ctrl+Enter para gerar</p>
+                  {aiOpen && (
+                    <div className="flex gap-2 mt-2 p-3 rounded-lg bg-muted/40 border border-border">
+                      <Input
+                        placeholder="Descreva a demanda para a IA preencher os campos…"
+                        value={aiPrompt}
+                        onChange={(e) => setAiPrompt(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) handleAiGenerate(); }}
+                        className="h-9 text-sm"
+                      />
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="secondary"
+                        onClick={handleAiGenerate}
+                        disabled={aiLoading || !aiPrompt.trim()}
+                        className="shrink-0"
+                      >
+                        {aiLoading
+                          ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          : <Sparkles className="h-3.5 w-3.5" />}
+                        <span className="ml-1.5">{aiLoading ? "Gerando…" : "Gerar"}</span>
+                      </Button>
+                    </div>
+                  )}
                 </div>
 
-                {/* Informações principais */}
-                <div className="space-y-3">
-                  <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Informações principais</p>
+                <hr className="border-border" />
+
+                {/* ── Organização ── */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
-                    <div className="flex items-center gap-2 mb-1">
-                      <Label htmlFor="titulo">Título *</Label>
-                      {aiFilledFields && (
-                        <span className="inline-flex items-center gap-1 text-[10px] font-medium bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-400 px-1.5 py-0.5 rounded">
-                          <Sparkles className="h-2.5 w-2.5" />IA
-                        </span>
-                      )}
-                    </div>
-                    <Input
-                      id="titulo"
-                      value={form.titulo}
-                      onChange={(e) => setForm((f) => ({ ...f, titulo: e.target.value }))}
-                      className="h-11 text-base"
-                      placeholder="Título da demanda…"
-                    />
+                    <Label htmlFor="projeto-nova" className="mb-1.5 block">Projeto</Label>
+                    <select
+                      id="projeto-nova"
+                      value={novaProjetoId}
+                      onChange={(e) => setNovaProjetoId(e.target.value)}
+                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                    >
+                      <option value="">Sem projeto (Geral)</option>
+                      {projetos.map((p) => (<option key={p.id} value={p.id}>{p.nome}</option>))}
+                    </select>
                   </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <Label htmlFor="projeto-nova">Projeto</Label>
-                      <select
-                        id="projeto-nova"
-                        value={novaProjetoId}
-                        onChange={(e) => setNovaProjetoId(e.target.value)}
-                        className="mt-1 flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                      >
-                        <option value="">Sem projeto (Geral)</option>
-                        {projetos.map((p) => (<option key={p.id} value={p.id}>{p.nome}</option>))}
-                      </select>
-                    </div>
-                    <div>
-                      <Label htmlFor="responsavel-nova">Responsável</Label>
-                      <select
-                        id="responsavel-nova"
-                        value={novaResponsavelId}
-                        onChange={(e) => setNovaResponsavelId(e.target.value)}
-                        className="mt-1 flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                      >
-                        <option value="">Sem responsável</option>
-                        {(teamMembers as TeamMember[]).map((m) => (<option key={m.id} value={m.id}>{m.nome}</option>))}
-                      </select>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Classificação */}
-                <div className="space-y-3">
-                  <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Classificação</p>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <Label htmlFor="tipo-nova">Tipo</Label>
-                      <select
-                        id="tipo-nova"
-                        value={form.tipo}
-                        onChange={(e) => setForm((f) => ({ ...f, tipo: e.target.value }))}
-                        className="mt-1 flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                      >
-                        <option value="">Selecione</option>
-                        <option value="Bug">Bug</option>
-                        <option value="Feature">Feature</option>
-                        <option value="Melhoria">Melhoria</option>
-                        <option value="Análise">Análise</option>
-                        <option value="Outro">Outro</option>
-                      </select>
-                    </div>
-                    <div>
-                      <Label>Prioridade</Label>
-                      <div className="mt-1 grid grid-cols-4 gap-1">
-                        {(["BAIXA", "MEDIA", "ALTA", "URGENTE"] as const).map((p) => {
-                          const isSelected = novaPrioridade === p;
-                          const colorMap: Record<string, string> = {
-                            BAIXA: isSelected ? "bg-slate-600 text-white border-slate-600" : "border-slate-300 text-slate-600 hover:border-slate-400 dark:border-slate-600 dark:text-slate-400",
-                            MEDIA: isSelected ? "bg-blue-600 text-white border-blue-600" : "border-blue-300 text-blue-600 hover:border-blue-400 dark:border-blue-700 dark:text-blue-400",
-                            ALTA: isSelected ? "bg-orange-500 text-white border-orange-500" : "border-orange-300 text-orange-600 hover:border-orange-400 dark:border-orange-700 dark:text-orange-400",
-                            URGENTE: isSelected ? "bg-red-600 text-white border-red-600" : "border-red-300 text-red-600 hover:border-red-400 dark:border-red-800 dark:text-red-400",
-                          };
-                          const labelMap: Record<string, string> = { BAIXA: "Baixa", MEDIA: "Média", ALTA: "Alta", URGENTE: "Urg." };
-                          return (
-                            <button
-                              key={p}
-                              type="button"
-                              onClick={() => setNovaPrioridade(p)}
-                              className={`rounded-md border py-1.5 text-[11px] font-semibold transition-colors ${colorMap[p]}`}
-                            >
-                              {labelMap[p]}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Detalhes */}
-                <div className="space-y-3">
-                  <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                    Detalhes <span className="font-normal normal-case">(opcional)</span>
-                  </p>
                   <div>
-                    <Label htmlFor="descricao-nova">Descrição</Label>
-                    <textarea
-                      id="descricao-nova"
-                      className="mt-1 flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm resize-none"
-                      value={form.descricao}
-                      onChange={(e) => setForm((f) => ({ ...f, descricao: e.target.value }))}
-                      placeholder="Contexto adicional, links, detalhes técnicos…"
-                    />
+                    <Label htmlFor="responsavel-nova" className="mb-1.5 block">Responsável</Label>
+                    <select
+                      id="responsavel-nova"
+                      value={novaResponsavelId}
+                      onChange={(e) => setNovaResponsavelId(e.target.value)}
+                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                    >
+                      <option value="">Sem responsável</option>
+                      {(teamMembers as TeamMember[]).map((m) => (<option key={m.id} value={m.id}>{m.nome}</option>))}
+                    </select>
                   </div>
                 </div>
+
+                <hr className="border-border" />
+
+                {/* ── Classificação ── */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <Label htmlFor="tipo-nova" className="mb-1.5 block">Tipo</Label>
+                    <select
+                      id="tipo-nova"
+                      value={form.tipo}
+                      onChange={(e) => setForm((f) => ({ ...f, tipo: e.target.value }))}
+                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                    >
+                      <option value="">Selecione</option>
+                      <option value="Bug">Bug</option>
+                      <option value="Feature">Feature</option>
+                      <option value="Melhoria">Melhoria</option>
+                      <option value="Análise">Análise</option>
+                      <option value="Outro">Outro</option>
+                    </select>
+                  </div>
+                  <div>
+                    <Label className="mb-1.5 block">Prioridade</Label>
+                    <div className="flex flex-wrap gap-1.5">
+                      {(["BAIXA", "MEDIA", "ALTA", "URGENTE"] as const).map((p) => {
+                        const isSelected = novaPrioridade === p;
+                        const colorMap: Record<string, string> = {
+                          BAIXA: isSelected ? "bg-slate-600 text-white border-slate-600" : "border-input text-muted-foreground hover:border-slate-400 hover:text-slate-700 dark:hover:text-slate-300",
+                          MEDIA: isSelected ? "bg-blue-600 text-white border-blue-600" : "border-input text-muted-foreground hover:border-blue-400 hover:text-blue-700 dark:hover:text-blue-400",
+                          ALTA: isSelected ? "bg-orange-500 text-white border-orange-500" : "border-input text-muted-foreground hover:border-orange-400 hover:text-orange-600 dark:hover:text-orange-400",
+                          URGENTE: isSelected ? "bg-red-600 text-white border-red-600" : "border-input text-muted-foreground hover:border-red-400 hover:text-red-600 dark:hover:text-red-400",
+                        };
+                        const labelMap: Record<string, string> = { BAIXA: "Baixa", MEDIA: "Média", ALTA: "Alta", URGENTE: "Urgente" };
+                        return (
+                          <button
+                            key={p}
+                            type="button"
+                            onClick={() => setNovaPrioridade(p)}
+                            className={`rounded-md border px-3 py-1.5 text-xs font-medium transition-colors flex-1 ${colorMap[p]}`}
+                          >
+                            {labelMap[p]}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+
               </div>
 
               {/* Footer fixo */}

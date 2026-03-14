@@ -1,5 +1,6 @@
 import { getSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
+import type { Prisma } from "@prisma/client";
 import { getAccessibleProjectIds, buildProjectFilter } from "@/lib/authorization";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { CardStatusBadge, PrioridadeBadge } from "@/components/ui/status-badge";
@@ -96,6 +97,10 @@ export default async function DashboardPage() {
           ],
         };
 
+  // Typed aliases for use inside $transaction (groupBy requires exact types)
+  const cardFilter = cardProjetoFilter as Prisma.CardWhereInput;
+  const demandaWhere = demandaFilter as Prisma.DemandaWhereInput;
+
   const hoje = new Date();
   const doisDiasAtras = new Date(hoje);
   doisDiasAtras.setDate(hoje.getDate() - 2);
@@ -151,9 +156,90 @@ export default async function DashboardPage() {
     }),
   ]);
 
-  // ─── Batch 2: análise, visualizações e progresso de sprint ───────────────
-  const [
-    [
+  // ─── Batch 2: análise e visualizações (interactive transaction — 1 conexão) ─
+  const {
+    cardsPorStatusRaw,
+    cardsPorPrioridadeRaw,
+    demandasPorStatusRaw,
+    cardsAtencaoList,
+    cardsTimeline,
+    sprintsTimeline,
+    teamCardsRaw,
+    demandasPorUserRaw,
+  } = await prisma.$transaction(async (tx) => {
+    const cardsPorStatusRaw = await tx.card.groupBy({
+      by: ["status"],
+      where: cardFilter,
+      _count: { id: true },
+    });
+    const cardsPorPrioridadeRaw = await tx.card.groupBy({
+      by: ["prioridade"],
+      where: { ...cardFilter, status: { notIn: ["CONCLUIDO", "CANCELADO"] } },
+      _count: { id: true },
+    });
+    const demandasPorStatusRaw = await tx.demanda.groupBy({
+      by: ["statusRefinamento"],
+      where: demandaWhere,
+      _count: { id: true },
+    });
+    const cardsAtencaoList = await tx.card.findMany({
+      where: {
+        ...cardFilter,
+        status: { notIn: ["CONCLUIDO", "CANCELADO"] },
+        OR: [{ bloqueado: true }, { prazo: { lt: hoje } }],
+      },
+      select: {
+        id: true,
+        titulo: true,
+        status: true,
+        prioridade: true,
+        prazo: true,
+        bloqueado: true,
+        responsavel: { select: { id: true, nome: true } },
+        projeto: { select: { nome: true } },
+      },
+      orderBy: [{ bloqueado: "desc" }, { prazo: "asc" }],
+      take: 7,
+    });
+    const cardsTimeline = await tx.card.findMany({
+      where: {
+        ...cardFilter,
+        status: { notIn: ["CONCLUIDO", "CANCELADO"] },
+        prazo: { gte: hoje, lte: em21Dias },
+      },
+      select: {
+        id: true,
+        titulo: true,
+        prazo: true,
+        prioridade: true,
+        status: true,
+        responsavel: { select: { nome: true } },
+        projeto: { select: { nome: true } },
+      },
+      orderBy: { prazo: "asc" },
+    });
+    const sprintsTimeline = await tx.sprint.findMany({
+      where: {
+        ...sprintProjetoFilter,
+        status: { in: ["EM_ANDAMENTO", "PLANEJADA"] },
+        dataFim: { gte: ha7Dias },
+        dataInicio: { lte: em21Dias },
+      },
+      include: { projeto: { select: { nome: true } } },
+      orderBy: { dataInicio: "asc" },
+      take: 8,
+    });
+    const teamCardsRaw = await tx.card.groupBy({
+      by: ["responsavelId"],
+      where: { ...cardFilter, status: { notIn: ["CONCLUIDO", "CANCELADO"] }, responsavelId: { not: null } },
+      _count: { id: true },
+    });
+    const demandasPorUserRaw = await tx.demanda.groupBy({
+      by: ["responsavelId"],
+      where: { ...demandaWhere, responsavelId: { not: null } },
+      _count: { id: true },
+    });
+    return {
       cardsPorStatusRaw,
       cardsPorPrioridadeRaw,
       demandasPorStatusRaw,
@@ -162,91 +248,18 @@ export default async function DashboardPage() {
       sprintsTimeline,
       teamCardsRaw,
       demandasPorUserRaw,
-    ],
-    concluidosPorSprint,
-  ] = await Promise.all([
-    prisma.$transaction([
-      prisma.card.groupBy({ by: ["status"], where: cardProjetoFilter, _count: { id: true } }),
-      prisma.card.groupBy({
-        by: ["prioridade"],
-        where: { ...cardProjetoFilter, status: { notIn: ["CONCLUIDO", "CANCELADO"] } },
-        _count: { id: true },
-      }),
-      prisma.demanda.groupBy({
-        by: ["statusRefinamento"],
-        where: demandaFilter,
-        _count: { id: true },
-      }),
-      prisma.card.findMany({
-        where: {
-          ...cardProjetoFilter,
-          status: { notIn: ["CONCLUIDO", "CANCELADO"] },
-          OR: [{ bloqueado: true }, { prazo: { lt: hoje } }],
-        },
-        select: {
-          id: true,
-          titulo: true,
-          status: true,
-          prioridade: true,
-          prazo: true,
-          bloqueado: true,
-          responsavel: { select: { id: true, nome: true } },
-          projeto: { select: { nome: true } },
-        },
-        orderBy: [{ bloqueado: "desc" }, { prazo: "asc" }],
-        take: 7,
-      }),
-      prisma.card.findMany({
-        where: {
-          ...cardProjetoFilter,
-          status: { notIn: ["CONCLUIDO", "CANCELADO"] },
-          prazo: { gte: hoje, lte: em21Dias },
-        },
-        select: {
-          id: true,
-          titulo: true,
-          prazo: true,
-          prioridade: true,
-          status: true,
-          responsavel: { select: { nome: true } },
-          projeto: { select: { nome: true } },
-        },
-        orderBy: { prazo: "asc" },
-      }),
-      prisma.sprint.findMany({
-        where: {
-          ...sprintProjetoFilter,
-          status: { in: ["EM_ANDAMENTO", "PLANEJADA"] },
-          dataFim: { gte: ha7Dias },
-          dataInicio: { lte: em21Dias },
-        },
-        include: { projeto: { select: { nome: true } } },
-        orderBy: { dataInicio: "asc" },
-        take: 8,
-      }),
-      prisma.card.groupBy({
-        by: ["responsavelId"],
-        where: {
-          ...cardProjetoFilter,
-          status: { notIn: ["CONCLUIDO", "CANCELADO"] },
-          responsavelId: { not: null },
-        },
-        _count: { id: true },
-      }),
-      prisma.demanda.groupBy({
-        by: ["responsavelId"],
-        where: { ...demandaFilter, responsavelId: { not: null } },
-        _count: { id: true },
-      }),
-    ]),
+    };
+  });
+
+  // ─── Sprint progress (standalone — conditional) ───────────────────────────
+  const concluidosPorSprint =
     sprintsAtivas.length > 0
-      ? prisma.card.groupBy({
+      ? await prisma.card.groupBy({
           by: ["sprintId"],
           where: { sprintId: { in: sprintsAtivas.map((s) => s.id) }, status: "CONCLUIDO" },
           _count: { id: true },
         })
-      : Promise.resolve([]),
-  ]);
+      : [];
 
   const sprintsComProgresso = sprintsAtivas.map((s) => {
     const concluidos = concluidosPorSprint.find((c) => c.sprintId === s.id)?._count.id ?? 0;
@@ -259,51 +272,38 @@ export default async function DashboardPage() {
   });
 
   // ─── Team workload ────────────────────────────────────────────────────────
-  const userIds = [
-    ...new Set([
+  const userIds = Array.from(
+    new Set([
       ...teamCardsRaw.map((r) => r.responsavelId!),
       ...demandasPorUserRaw.map((r) => r.responsavelId!),
-    ]),
-  ];
+    ])
+  );
 
-  const [teamUsers, cardsBloqueadosPorUser, cardsAtrasadosPorUser, cardsEmAndamentoPorUser] =
+  const { teamUsers, cardsBloqueadosPorUser, cardsAtrasadosPorUser, cardsEmAndamentoPorUser } =
     userIds.length > 0
-      ? await prisma.$transaction([
-          prisma.user.findMany({
+      ? await prisma.$transaction(async (tx) => {
+          const teamUsers = await tx.user.findMany({
             where: { id: { in: userIds } },
             select: { id: true, nome: true, cargo: { select: { slug: true, nome: true } } },
-          }),
-          prisma.card.groupBy({
+          });
+          const cardsBloqueadosPorUser = await tx.card.groupBy({
             by: ["responsavelId"],
-            where: {
-              ...cardProjetoFilter,
-              bloqueado: true,
-              status: { notIn: ["CONCLUIDO", "CANCELADO"] },
-              responsavelId: { in: userIds },
-            },
+            where: { ...cardFilter, bloqueado: true, status: { notIn: ["CONCLUIDO", "CANCELADO"] }, responsavelId: { in: userIds } },
             _count: { id: true },
-          }),
-          prisma.card.groupBy({
+          });
+          const cardsAtrasadosPorUser = await tx.card.groupBy({
             by: ["responsavelId"],
-            where: {
-              ...cardProjetoFilter,
-              prazo: { lt: hoje },
-              status: { notIn: ["CONCLUIDO", "CANCELADO"] },
-              responsavelId: { in: userIds },
-            },
+            where: { ...cardFilter, prazo: { lt: hoje }, status: { notIn: ["CONCLUIDO", "CANCELADO"] }, responsavelId: { in: userIds } },
             _count: { id: true },
-          }),
-          prisma.card.groupBy({
+          });
+          const cardsEmAndamentoPorUser = await tx.card.groupBy({
             by: ["responsavelId"],
-            where: {
-              ...cardProjetoFilter,
-              status: { in: ["EM_ANDAMENTO"] },
-              responsavelId: { in: userIds },
-            },
+            where: { ...cardFilter, status: { in: ["EM_ANDAMENTO"] }, responsavelId: { in: userIds } },
             _count: { id: true },
-          }),
-        ])
-      : [[], [], [], []];
+          });
+          return { teamUsers, cardsBloqueadosPorUser, cardsAtrasadosPorUser, cardsEmAndamentoPorUser };
+        })
+      : { teamUsers: [], cardsBloqueadosPorUser: [], cardsAtrasadosPorUser: [], cardsEmAndamentoPorUser: [] };
 
   const teamWorkload = teamUsers
     .map((user) => ({

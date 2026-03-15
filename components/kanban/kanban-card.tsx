@@ -2,7 +2,7 @@
 
 import { useDraggable } from "@dnd-kit/core";
 import { useRouter } from "next/navigation";
-import { CalendarDays, CheckSquare, Pencil, Clock, Zap, Layers, ShieldAlert, MoreVertical, Archive, Trash2, UserX } from "lucide-react";
+import { CalendarDays, CheckSquare, Pencil, Zap, Layers, ShieldAlert, MoreVertical, Archive, Trash2, UserX, CalendarX, User } from "lucide-react";
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -275,7 +275,7 @@ export function KanbanCard({
           )}
           {fieldConfig.estimativa && card.estimativa != null && (
             <span className="inline-flex items-center gap-0.5 rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
-              # {card.estimativa}
+              {card.estimativa} pts
             </span>
           )}
           {card.bloqueado && (
@@ -312,20 +312,19 @@ export function KanbanCard({
                   isOverdue ? "text-red-500 font-medium" : "text-muted-foreground"
                 }`}
               >
-                <CalendarDays className="h-3 w-3" />
-                {formatDate(card.prazo)}
+                <CalendarDays className="h-3 w-3 shrink-0" />
+                Prazo · {formatDate(card.prazo)}
               </span>
             )}
             {missingPrazo && (
-              <span className="inline-flex items-center gap-0.5 text-[10px] text-muted-foreground/50 italic">
-                <CalendarDays className="h-3 w-3" />
+              <span className="inline-flex items-center gap-0.5 rounded-full bg-amber-50 border border-amber-200/70 px-1.5 py-0.5 text-[10px] font-medium text-amber-600 dark:bg-amber-950/20 dark:border-amber-900/50 dark:text-amber-400">
+                <CalendarX className="h-3 w-3 shrink-0" />
                 Sem prazo
               </span>
             )}
             {fieldConfig.criacao && card.createdAt && (
-              <span className="flex items-center gap-0.5 text-muted-foreground/70">
-                <Clock className="h-3 w-3" />
-                {formatDate(card.createdAt)}
+              <span className="flex items-center gap-0.5 text-muted-foreground/70 text-[10px]">
+                Criado · {formatDate(card.createdAt)}
               </span>
             )}
             {fieldConfig.subtarefas && totalSub > 0 && (
@@ -343,19 +342,22 @@ export function KanbanCard({
             </span>
           )}
           {fieldConfig.responsavel && responsaveisLista.length > 0 && (
-            <div className="flex flex-wrap gap-1">
-              {responsaveisLista.map((r) => (
-                <span
-                  key={r.id}
-                  title={r.nome}
-                  className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary"
-                >
-                  <span className="h-4 w-4 rounded-full bg-primary/25 flex items-center justify-center text-[8px] font-bold shrink-0">
-                    {getInitials(r.nome)}
+            <div className="flex items-center gap-1.5">
+              <User className="h-3 w-3 text-muted-foreground shrink-0" />
+              <div className="flex flex-wrap gap-1">
+                {responsaveisLista.map((r) => (
+                  <span
+                    key={r.id}
+                    title={`Responsável: ${r.nome}`}
+                    className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary"
+                  >
+                    <span className="h-4 w-4 rounded-full bg-primary/25 flex items-center justify-center text-[8px] font-bold shrink-0">
+                      {getInitials(r.nome)}
+                    </span>
+                    {r.nome.split(" ")[0]}
                   </span>
-                  {r.nome.split(" ")[0]}
-                </span>
-              ))}
+                ))}
+              </div>
             </div>
           )}
         </div>

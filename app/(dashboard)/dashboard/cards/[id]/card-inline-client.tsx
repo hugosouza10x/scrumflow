@@ -384,6 +384,7 @@ export function CardInlineClient({
   const [card, setCard] = useState<CardDetail>(initialCard);
   const [savingField, setSavingField] = useState<string | null>(null);
   const [editingField, setEditingField] = useState<string | null>(null);
+  const [prazoEditValue, setPrazoEditValue] = useState<string>("");
   const [aiLoading, setAiLoading] = useState<"descricao" | "criterios" | null>(null);
   const [responsaveisDropdownOpen, setResponsaveisDropdownOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -463,6 +464,21 @@ export function CardInlineClient({
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [card.id, card.subtarefas]
   );
+
+  // ─── Confirmar prazo (explicit save for date field) ─────────────────────────
+
+  const handleAbrirPrazoEdit = () => {
+    setPrazoEditValue(card.prazo?.slice(0, 10) ?? "");
+    setEditingField("prazo");
+  };
+
+  const handleConfirmarPrazo = () => {
+    const v = prazoEditValue;
+    setEditingField(null);
+    if (v !== (card.prazo?.slice(0, 10) ?? "")) {
+      saveField("prazo", v || null);
+    }
+  };
 
   // ─── Archive / Delete ───────────────────────────────────────────────────────
 
@@ -1081,20 +1097,48 @@ export function CardInlineClient({
               <SidebarField label="Prazo" icon={Calendar}>
                 {savingField === "prazo" && <Loader2 className="h-3 w-3 animate-spin text-primary mb-1" />}
                 {editingField === "prazo" ? (
-                  <input
-                    autoFocus type="date" min={todayStr()}
-                    defaultValue={card.prazo?.slice(0, 10) ?? ""}
-                    onBlur={(e) => {
-                      setEditingField(null);
-                      const v = e.target.value;
-                      if (v !== (card.prazo?.slice(0, 10) ?? "")) saveField("prazo", v || null);
-                    }}
-                    onKeyDown={(e) => { if (e.key === "Escape") setEditingField(null); }}
-                    className="text-sm border border-input rounded-md px-2.5 py-1.5 w-full focus:outline-none focus:ring-1 focus:ring-ring"
-                  />
+                  <div className="space-y-1.5">
+                    <input
+                      autoFocus
+                      type="date"
+                      value={prazoEditValue}
+                      onChange={(e) => setPrazoEditValue(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") { e.preventDefault(); handleConfirmarPrazo(); }
+                        if (e.key === "Escape") setEditingField(null);
+                      }}
+                      className="text-sm border border-input rounded-md px-2.5 py-1.5 w-full focus:outline-none focus:ring-1 focus:ring-ring"
+                    />
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={handleConfirmarPrazo}
+                        className="flex-1 h-7 rounded-md bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors"
+                      >
+                        Confirmar
+                      </button>
+                      {card.prazo && (
+                        <button
+                          type="button"
+                          onClick={() => { saveField("prazo", null); setEditingField(null); }}
+                          className="h-7 px-2 rounded-md border text-xs text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                        >
+                          Limpar
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => setEditingField(null)}
+                        className="h-7 w-7 rounded-md flex items-center justify-center text-muted-foreground hover:bg-muted transition-colors"
+                        aria-label="Cancelar"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  </div>
                 ) : (
                   <button
-                    onClick={() => setEditingField("prazo")}
+                    onClick={handleAbrirPrazoEdit}
                     className={`text-sm text-left w-full rounded-md px-2.5 py-1.5 border border-transparent hover:border-border hover:bg-muted/30 transition-all flex items-center gap-1.5 ${
                       isOverdue ? "text-red-600 font-medium" : card.prazo ? "text-foreground" : "text-muted-foreground italic"
                     }`}

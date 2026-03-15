@@ -148,9 +148,13 @@ export function KanbanCard({
       ? [card.responsavel]
       : [];
 
-  // Badge "Sem responsável" para cards em execução
-  const isExecutionStatus = ["A_FAZER", "EM_ANDAMENTO", "EM_REVISAO"].includes(card.status);
+  // Badge "Sem responsável" para cards em execução/homologação
+  const isExecutionStatus = ["A_FAZER", "EM_ANDAMENTO", "EM_REVISAO", "HOMOLOGACAO"].includes(card.status);
   const missingResponsavel = !isDemanda && isExecutionStatus && responsaveisLista.length === 0;
+
+  // Placeholder "Sem prazo" para cards em estágio ativo sem prazo definido
+  const isActiveStatus = ["A_FAZER", "EM_ANDAMENTO", "EM_REVISAO", "BLOQUEADO", "HOMOLOGACAO"].includes(card.status);
+  const missingPrazo = !isDemanda && isActiveStatus && !card.prazo && fieldConfig.prazo;
 
   // Subtarefas progress
   const totalSub = card._count?.subtarefas ?? 0;
@@ -310,6 +314,12 @@ export function KanbanCard({
               >
                 <CalendarDays className="h-3 w-3" />
                 {formatDate(card.prazo)}
+              </span>
+            )}
+            {missingPrazo && (
+              <span className="inline-flex items-center gap-0.5 text-[10px] text-muted-foreground/50 italic">
+                <CalendarDays className="h-3 w-3" />
+                Sem prazo
               </span>
             )}
             {fieldConfig.criacao && card.createdAt && (

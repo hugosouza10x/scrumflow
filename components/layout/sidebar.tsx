@@ -102,13 +102,16 @@ function SidebarContent({ user, onClose }: { user: SessionUser; onClose?: () => 
         href={item.href}
         onClick={onClose}
         className={cn(
-          "flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors",
+          "relative flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors overflow-hidden",
           isActive
             ? "bg-primary/10 text-primary font-medium"
-            : "text-muted-foreground hover:bg-muted hover:text-foreground"
+            : "text-muted-foreground hover:bg-muted/80 hover:text-foreground"
         )}
       >
-        <Icon className="h-4 w-4 shrink-0" />
+        {isActive && (
+          <span className="absolute left-0 top-1/2 -translate-y-1/2 h-4 w-0.5 rounded-r-full bg-primary" />
+        )}
+        <Icon className="h-4 w-4 shrink-0" strokeWidth={1.5} />
         <span className="flex-1 truncate">{item.label}</span>
         {item.badge && pendingCount > 0 && (
           <span className="ml-auto inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-bold text-primary-foreground">
@@ -121,9 +124,9 @@ function SidebarContent({ user, onClose }: { user: SessionUser; onClose?: () => 
 
   return (
     <div className="flex w-56 flex-col h-full bg-card">
-      <div className="flex items-center gap-2 p-4 border-b">
-        <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-          <Zap className="h-4 w-4" />
+      <div className="flex items-center gap-2 p-4 border-b border-border/60">
+        <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-sm">
+          <Zap className="h-4 w-4" strokeWidth={1.5} />
         </div>
         <Link href="/dashboard" className="font-semibold text-foreground flex-1">
           ScrumFlow
@@ -133,7 +136,7 @@ function SidebarContent({ user, onClose }: { user: SessionUser; onClose?: () => 
             onClick={onClose}
             className="xl:hidden h-7 w-7 flex items-center justify-center rounded-md text-muted-foreground hover:bg-muted"
           >
-            <X className="h-4 w-4" />
+            <X className="h-4 w-4" strokeWidth={1.5} />
           </button>
         )}
       </div>
@@ -161,22 +164,25 @@ function SidebarContent({ user, onClose }: { user: SessionUser; onClose?: () => 
               href="/dashboard/usuarios"
               onClick={onClose}
               className={cn(
-                "flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors",
+                "relative flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors overflow-hidden",
                 pathname.startsWith("/dashboard/usuarios")
                   ? "bg-primary/10 text-primary font-medium"
-                  : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                  : "text-muted-foreground hover:bg-muted/80 hover:text-foreground"
               )}
             >
-              <Users className="h-4 w-4" />
+              {pathname.startsWith("/dashboard/usuarios") && (
+                <span className="absolute left-0 top-1/2 -translate-y-1/2 h-4 w-0.5 rounded-r-full bg-primary" />
+              )}
+              <Users className="h-4 w-4" strokeWidth={1.5} />
               Usuários
             </Link>
           </div>
         )}
       </nav>
 
-      <div className="border-t p-3">
+      <div className="border-t border-border/60 p-3">
         <div className="flex items-center gap-2">
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary ring-1 ring-border">
             {getInitials(user.nome)}
           </div>
           <div className="min-w-0">
@@ -195,7 +201,7 @@ export function Sidebar({ user }: { user: SessionUser }) {
   return (
     <>
       {/* Desktop sidebar — always visible on xl+ */}
-      <aside className="hidden xl:flex flex-col w-56 flex-shrink-0 border-r">
+      <aside className="hidden xl:flex flex-col w-56 flex-shrink-0 border-r border-border/60">
         <SidebarContent user={user} />
       </aside>
 

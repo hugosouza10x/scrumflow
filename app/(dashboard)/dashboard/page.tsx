@@ -21,6 +21,7 @@ import {
   UserX,
   CalendarX,
   Activity,
+  TrendingUp,
 } from "lucide-react";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -427,36 +428,51 @@ export default async function DashboardPage() {
     <div className="space-y-8">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
-        <p className="text-sm text-muted-foreground mt-0.5">
-          Visão gerencial ·{" "}
-          {hoje.toLocaleDateString("pt-BR", {
-            weekday: "long",
-            day: "numeric",
-            month: "long",
-          })}
-        </p>
+        <div className="flex items-end justify-between gap-4">
+          <div>
+            <h1 className="text-xl font-semibold tracking-tight text-foreground">Dashboard</h1>
+            <p className="text-sm text-muted-foreground mt-0.5">
+              Visão gerencial ·{" "}
+              {hoje.toLocaleDateString("pt-BR", {
+                weekday: "long",
+                day: "numeric",
+                month: "long",
+              })}
+            </p>
+          </div>
+          <div className="flex items-center gap-4 text-xs text-muted-foreground pb-0.5 shrink-0">
+            <span>
+              <span className="font-semibold text-foreground tabular-nums">{totalCardsAtivos}</span>{" "}
+              cards ativos
+            </span>
+            <span>
+              <span className="font-semibold text-foreground tabular-nums">{totalDemandasAtivas}</span>{" "}
+              no funil
+            </span>
+          </div>
+        </div>
+        <div className="mt-4 border-t border-border/50" />
       </div>
 
       {/* ── BLOCO 1: Atenção Imediata ──────────────────────────────────────── */}
-      <div className="space-y-2">
-        <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
-          <AlertCircle className="h-3.5 w-3.5" /> Atenção imediata
+      <div className="space-y-3 animate-fade-in-up" style={{ animationDelay: "0ms" }}>
+        <h2 className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+          <AlertCircle className="h-3.5 w-3.5" strokeWidth={1.5} /> Atenção imediata
         </h2>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2 mt-1">
           {alertChips.map((chip) => {
             const Icon = chip.icon;
             const inner = (
               <div
                 className={[
-                  "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors",
+                  "inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-semibold transition-colors",
                   chip.count > 0
-                    ? chip.active
-                    : "bg-muted border-transparent text-muted-foreground",
+                    ? chip.active + " shadow-sm"
+                    : "bg-muted/60 border-transparent text-muted-foreground",
                   chip.href && chip.count > 0 ? "cursor-pointer hover:opacity-80" : "",
                 ].filter(Boolean).join(" ")}
               >
-                <Icon className="h-3.5 w-3.5 shrink-0" />
+                <Icon className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} />
                 <span className="tabular-nums">{chip.count}</span>
                 <span>{chip.label}</span>
               </div>
@@ -469,23 +485,14 @@ export default async function DashboardPage() {
               <div key={chip.label}>{inner}</div>
             );
           })}
-          {/* Contexto resumido */}
-          <div className="ml-auto flex items-center gap-3 text-xs text-muted-foreground">
-            <span className="tabular-nums">
-              <span className="font-semibold text-foreground">{totalCardsAtivos}</span> cards ativos
-            </span>
-            <span className="tabular-nums">
-              <span className="font-semibold text-foreground">{totalDemandasAtivas}</span> demandas no funil
-            </span>
-          </div>
         </div>
       </div>
 
       {/* ── BLOCO 2: Sprints em andamento ─────────────────────────────────── */}
       {sprintsComProgresso.length > 0 && (
-        <div className="space-y-2">
-          <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
-            <Zap className="h-3.5 w-3.5 text-primary" />
+        <div className="space-y-3 animate-fade-in-up" style={{ animationDelay: "60ms" }}>
+          <h2 className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+            <Zap className="h-3.5 w-3.5 text-primary" strokeWidth={1.5} />
             Sprint{sprintsComProgresso.length > 1 ? "s" : ""} em andamento
           </h2>
           <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
@@ -493,7 +500,7 @@ export default async function DashboardPage() {
               <Link
                 key={s.id}
                 href={`/dashboard/sprints/${s.id}`}
-                className="rounded-xl border border-primary/20 bg-primary/5 p-4 hover:border-primary/50 hover:bg-primary/10 transition-all group"
+                className="rounded-xl border border-border/60 bg-card p-4 hover:border-primary/40 hover:shadow-sm transition-all group shadow-[0_1px_3px_rgb(0,0,0,0.04)]"
               >
                 <div className="flex items-start justify-between gap-2 mb-3">
                   <div className="min-w-0">
@@ -503,15 +510,15 @@ export default async function DashboardPage() {
                     <p className="text-xs text-muted-foreground">{s.projeto.nome}</p>
                   </div>
                   <span
-                    className={`text-xs font-medium shrink-0 ${
+                    className={`inline-flex items-center gap-1 text-xs font-medium shrink-0 px-2 py-0.5 rounded-md ${
                       s.diasRestantes < 0
-                        ? "text-red-500"
+                        ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
                         : s.diasRestantes <= 2
-                        ? "text-orange-500"
-                        : "text-muted-foreground"
+                        ? "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400"
+                        : "bg-muted text-muted-foreground"
                     }`}
                   >
-                    <CalendarDays className="h-3 w-3 inline mr-0.5" />
+                    <CalendarDays className="h-3 w-3" strokeWidth={1.5} />
                     {s.diasRestantes < 0
                       ? `${Math.abs(s.diasRestantes)}d atrasada`
                       : s.diasRestantes === 0
@@ -519,14 +526,14 @@ export default async function DashboardPage() {
                       : `${s.diasRestantes}d restante${s.diasRestantes !== 1 ? "s" : ""}`}
                   </span>
                 </div>
-                <div className="space-y-1">
+                <div className="space-y-1.5">
                   <div className="flex justify-between text-xs text-muted-foreground">
                     <span>
                       {s.concluidos}/{s.total} cards
                     </span>
-                    <span className="font-semibold text-primary">{s.pct}%</span>
+                    <span className="font-semibold text-primary tabular-nums">{s.pct}%</span>
                   </div>
-                  <div className="h-1.5 w-full rounded-full bg-primary/15 overflow-hidden">
+                  <div className="h-2 w-full rounded-full bg-primary/10 overflow-hidden">
                     <div
                       className="h-full rounded-full bg-primary transition-all"
                       style={{ width: `${s.pct}%` }}
@@ -540,60 +547,72 @@ export default async function DashboardPage() {
       )}
 
       {/* ── BLOCO 3: Saúde da Operação + Funil ────────────────────────────── */}
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className="grid gap-6 lg:grid-cols-2 animate-fade-in-up" style={{ animationDelay: "120ms" }}>
         {/* Tiles de saúde operacional */}
-        <div className="space-y-2">
-          <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
-            <Activity className="h-3.5 w-3.5" /> Saúde da operação
+        <div className="space-y-3">
+          <h2 className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+            <Activity className="h-3.5 w-3.5" strokeWidth={1.5} /> Saúde da operação
           </h2>
           <div className="grid grid-cols-2 gap-3">
-            <div className="rounded-xl border bg-sky-50 dark:bg-sky-950/20 p-4 space-y-1">
-              <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide leading-tight">
-                Em andamento
-              </p>
-              <p className="text-3xl font-bold tabular-nums text-sky-700 dark:text-sky-400">
-                {cardsEmAndamento}
-              </p>
-              <p className="text-[10px] text-muted-foreground">cards em execução</p>
+            <div className="rounded-xl border border-border/60 bg-card p-4 shadow-[0_1px_3px_rgb(0,0,0,0.04)] flex gap-3 items-start">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-sky-100 dark:bg-sky-900/30">
+                <Activity className="h-4 w-4 text-sky-600 dark:text-sky-400" strokeWidth={1.5} />
+              </div>
+              <div className="min-w-0">
+                <p className="text-[11px] text-muted-foreground leading-tight">Em andamento</p>
+                <p className="text-2xl font-bold tabular-nums text-foreground leading-tight mt-0.5">
+                  {cardsEmAndamento}
+                </p>
+                <p className="text-[10px] text-muted-foreground mt-0.5">cards em execução</p>
+              </div>
             </div>
-            <div className="rounded-xl border bg-emerald-50 dark:bg-emerald-950/20 p-4 space-y-1">
-              <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide leading-tight">
-                Concluídos esta semana
-              </p>
-              <p className="text-3xl font-bold tabular-nums text-emerald-700 dark:text-emerald-400">
-                {cardsConcluidosEstaSemana}
-              </p>
-              <p className="text-[10px] text-muted-foreground">desde segunda-feira</p>
+            <div className="rounded-xl border border-border/60 bg-card p-4 shadow-[0_1px_3px_rgb(0,0,0,0.04)] flex gap-3 items-start">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-100 dark:bg-emerald-900/30">
+                <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" strokeWidth={1.5} />
+              </div>
+              <div className="min-w-0">
+                <p className="text-[11px] text-muted-foreground leading-tight">Concluídos esta semana</p>
+                <p className="text-2xl font-bold tabular-nums text-foreground leading-tight mt-0.5">
+                  {cardsConcluidosEstaSemana}
+                </p>
+                <p className="text-[10px] text-muted-foreground mt-0.5">desde segunda-feira</p>
+              </div>
             </div>
-            <div className="rounded-xl border bg-violet-50 dark:bg-violet-950/20 p-4 space-y-1">
-              <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide leading-tight">
-                Prontas para sprint
-              </p>
-              <p className="text-3xl font-bold tabular-nums text-violet-700 dark:text-violet-400">
-                {demandasProntas}
-              </p>
-              <p className="text-[10px] text-muted-foreground">demandas refinadas</p>
+            <div className="rounded-xl border border-border/60 bg-card p-4 shadow-[0_1px_3px_rgb(0,0,0,0.04)] flex gap-3 items-start">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-violet-100 dark:bg-violet-900/30">
+                <Inbox className="h-4 w-4 text-violet-600 dark:text-violet-400" strokeWidth={1.5} />
+              </div>
+              <div className="min-w-0">
+                <p className="text-[11px] text-muted-foreground leading-tight">Prontas para sprint</p>
+                <p className="text-2xl font-bold tabular-nums text-foreground leading-tight mt-0.5">
+                  {demandasProntas}
+                </p>
+                <p className="text-[10px] text-muted-foreground mt-0.5">demandas refinadas</p>
+              </div>
             </div>
-            <div className="rounded-xl border bg-amber-50 dark:bg-amber-950/20 p-4 space-y-1">
-              <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide leading-tight">
-                Taxa do funil
-              </p>
-              <p className="text-3xl font-bold tabular-nums text-amber-700 dark:text-amber-400">
-                {totalFunil > 0 ? Math.round((demandasProntas / totalFunil) * 100) : 0}%
-              </p>
-              <p className="text-[10px] text-muted-foreground">
-                {demandasProntas}/{totalFunil} prontas
-              </p>
+            <div className="rounded-xl border border-border/60 bg-card p-4 shadow-[0_1px_3px_rgb(0,0,0,0.04)] flex gap-3 items-start">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-amber-100 dark:bg-amber-900/30">
+                <TrendingUp className="h-4 w-4 text-amber-600 dark:text-amber-400" strokeWidth={1.5} />
+              </div>
+              <div className="min-w-0">
+                <p className="text-[11px] text-muted-foreground leading-tight">Taxa do funil</p>
+                <p className="text-2xl font-bold tabular-nums text-foreground leading-tight mt-0.5">
+                  {totalFunil > 0 ? Math.round((demandasProntas / totalFunil) * 100) : 0}%
+                </p>
+                <p className="text-[10px] text-muted-foreground mt-0.5">
+                  {demandasProntas}/{totalFunil} prontas
+                </p>
+              </div>
             </div>
           </div>
         </div>
 
         {/* Funil de Demandas */}
-        <Card>
+        <Card className="shadow-[0_1px_3px_rgb(0,0,0,0.04)] border-border/60">
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
               <div>
-                <CardTitle className="text-sm">Funil de demandas</CardTitle>
+                <CardTitle className="text-sm font-semibold">Funil de demandas</CardTitle>
                 <CardDescription>
                   Pipeline de refinamento · {totalFunil} demanda
                   {totalFunil !== 1 ? "s" : ""} no funil
@@ -601,7 +620,7 @@ export default async function DashboardPage() {
               </div>
               <Link href="/dashboard/backlog">
                 <Button variant="ghost" size="sm" className="text-xs h-7 gap-1">
-                  Ver backlog <ArrowRight className="h-3 w-3" />
+                  Ver backlog <ArrowRight className="h-3 w-3" strokeWidth={1.5} />
                 </Button>
               </Link>
             </div>
@@ -613,6 +632,7 @@ export default async function DashboardPage() {
                 count: demandasNaoRefinadas,
                 color: "bg-slate-400 dark:bg-slate-500",
                 textColor: "text-slate-600 dark:text-slate-300",
+                dotColor: "bg-slate-400",
                 desc: "Novas demandas aguardando análise",
               },
               {
@@ -620,6 +640,7 @@ export default async function DashboardPage() {
                 count: demandasEmRefinamento,
                 color: "bg-amber-500",
                 textColor: "text-amber-700 dark:text-amber-400",
+                dotColor: "bg-amber-500",
                 desc: "Em discussão ou detalhamento",
               },
               {
@@ -627,15 +648,19 @@ export default async function DashboardPage() {
                 count: demandasProntas,
                 color: "bg-emerald-500",
                 textColor: "text-emerald-700 dark:text-emerald-400",
+                dotColor: "bg-emerald-500",
                 desc: "Refinadas, aguardando sprint",
               },
             ].map((stage) => (
               <div key={stage.label} className="space-y-1.5">
                 <div className="flex items-center justify-between text-xs">
-                  <span className={`font-medium ${stage.textColor}`}>{stage.label}</span>
+                  <span className={`font-medium flex items-center gap-1.5 ${stage.textColor}`}>
+                    <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${stage.dotColor}`} />
+                    {stage.label}
+                  </span>
                   <span className="font-bold tabular-nums text-foreground">{stage.count}</span>
                 </div>
-                <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
+                <div className="h-2.5 w-full rounded-full bg-muted overflow-hidden">
                   <div
                     className={`h-full rounded-full transition-all ${stage.color}`}
                     style={{
@@ -650,42 +675,43 @@ export default async function DashboardPage() {
               </div>
             ))}
             {totalFunil === 0 && (
-              <p className="text-center text-sm text-muted-foreground py-4">
-                Nenhuma demanda no funil
-              </p>
+              <div className="flex flex-col items-center py-6 text-center gap-2">
+                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-muted">
+                  <Inbox className="h-4 w-4 text-muted-foreground" strokeWidth={1.5} />
+                </div>
+                <p className="text-sm text-muted-foreground">Nenhuma demanda no funil</p>
+              </div>
             )}
           </CardContent>
         </Card>
       </div>
 
       {/* ── BLOCO 4: Requer Atenção (full width) ──────────────────────────── */}
-      <div className="space-y-2">
-        <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+      <div className="space-y-3 animate-fade-in-up" style={{ animationDelay: "180ms" }}>
+        <div className="flex items-center justify-between">
+          <h2 className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+            <AlertCircle
+              className={`h-3.5 w-3.5 ${cardsAtencaoList.length > 0 ? "text-amber-500" : ""}`}
+              strokeWidth={1.5}
+            />
+            Requer atenção
+          </h2>
           {cardsAtencaoList.length > 0 && (
-            <AlertCircle className="h-3.5 w-3.5 text-amber-500" />
-          )}
-          {cardsAtencaoList.length === 0 && (
-            <AlertCircle className="h-3.5 w-3.5" />
-          )}
-          Requer atenção
-          {cardsAtencaoList.length > 0 && (
-            <span className="ml-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">
+            <span className="inline-flex items-center rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">
               {cardsAtencaoList.length}
             </span>
           )}
-        </h2>
-        <Card className={cardsAtencaoList.length > 0 ? "border-amber-200/70 dark:border-amber-900/50" : ""}>
+        </div>
+        <Card className={`shadow-[0_1px_3px_rgb(0,0,0,0.04)] ${cardsAtencaoList.length > 0 ? "border-amber-200/70 dark:border-amber-900/50" : "border-border/60"}`}>
           <CardContent className="pt-4">
             {cardsAtencaoList.length === 0 ? (
-              <div className="flex flex-col items-center py-6 text-center gap-2">
-                <div className="rounded-full bg-emerald-100 p-3 dark:bg-emerald-900/30">
-                  <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+              <div className="flex flex-col items-center py-8 text-center gap-2">
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-900/30">
+                  <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400" strokeWidth={1.5} />
                 </div>
-                <p className="text-sm font-medium text-emerald-700 dark:text-emerald-400">
-                  Tudo em ordem
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  Nenhum card bloqueado ou atrasado.
+                <p className="text-sm font-medium text-foreground mt-1">Tudo em ordem</p>
+                <p className="text-xs text-muted-foreground max-w-xs">
+                  Nenhum card bloqueado ou atrasado no momento.
                 </p>
               </div>
             ) : (
@@ -706,13 +732,22 @@ export default async function DashboardPage() {
                     <Link
                       key={card.id}
                       href={`/dashboard/cards/${card.id}`}
-                      className="flex items-start gap-3 rounded-lg border px-3 py-2.5 hover:bg-muted/50 transition-colors group"
+                      className={`relative flex items-start gap-3 rounded-lg border px-3 py-2.5 hover:bg-muted/50 transition-colors group overflow-hidden ${
+                        card.bloqueado
+                          ? "border-red-200/70 dark:border-red-900/30"
+                          : "border-orange-200/60 dark:border-orange-900/30"
+                      }`}
                     >
+                      <span
+                        className={`absolute left-0 top-0 bottom-0 w-0.5 ${
+                          card.bloqueado ? "bg-red-500" : "bg-orange-400"
+                        }`}
+                      />
                       <div className="shrink-0 mt-0.5">
                         {card.bloqueado ? (
-                          <ShieldAlert className="h-3.5 w-3.5 text-red-500" />
+                          <ShieldAlert className="h-3.5 w-3.5 text-red-500" strokeWidth={1.5} />
                         ) : (
-                          <Clock className="h-3.5 w-3.5 text-orange-500" />
+                          <Clock className="h-3.5 w-3.5 text-orange-500" strokeWidth={1.5} />
                         )}
                       </div>
                       <div className="flex-1 min-w-0">
@@ -757,13 +792,13 @@ export default async function DashboardPage() {
       </div>
 
       {/* ── BLOCO 5: Prazos e Horizonte ───────────────────────────────────── */}
-      <div className="space-y-2">
-        <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
-          <CalendarDays className="h-3.5 w-3.5" /> Prazos e horizonte
+      <div className="space-y-3 animate-fade-in-up" style={{ animationDelay: "220ms" }}>
+        <h2 className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+          <CalendarDays className="h-3.5 w-3.5" strokeWidth={1.5} /> Prazos e horizonte
         </h2>
         <div className="grid gap-4 md:grid-cols-3">
           {/* Coluna: Vencidos */}
-          <Card className={cardsVencidos.length > 0 ? "border-red-200/70 dark:border-red-900/50 bg-red-50/30 dark:bg-red-950/10" : ""}>
+          <Card className={`shadow-[0_1px_3px_rgb(0,0,0,0.04)] ${cardsVencidos.length > 0 ? "border-red-200/70 dark:border-red-900/50 bg-red-50/30 dark:bg-red-950/10 shadow-[0_1px_3px_rgb(220,38,38,0.06)]" : "border-border/60"}`}>
             <CardHeader className="pb-2 pt-4">
               <CardTitle
                 className={`text-xs font-semibold ${
@@ -772,13 +807,14 @@ export default async function DashboardPage() {
               >
                 Vencidos
               </CardTitle>
-              <CardDescription className="text-[10px]">Prazo já passou</CardDescription>
+              <CardDescription className="text-[11px]">Prazo já passou</CardDescription>
             </CardHeader>
             <CardContent className="space-y-1">
               {cardsVencidos.length === 0 ? (
-                <p className="text-center text-[10px] text-muted-foreground py-3">
-                  Nenhum vencido
-                </p>
+                <div className="flex flex-col items-center py-4 text-center gap-1.5">
+                  <CheckCircle2 className="h-4 w-4 text-muted-foreground/50" strokeWidth={1.5} />
+                  <p className="text-[10px] text-muted-foreground">Nenhum vencido</p>
+                </div>
               ) : (
                 <>
                   {cardsVencidos.slice(0, 5).map((card) => {
@@ -789,7 +825,7 @@ export default async function DashboardPage() {
                       <Link
                         key={card.id}
                         href={`/dashboard/cards/${card.id}`}
-                        className="flex items-center gap-2 rounded-md border border-red-200/50 dark:border-red-900/30 px-2 py-1.5 text-[10px] hover:bg-red-100/50 dark:hover:bg-red-950/30 transition-colors group"
+                        className="flex items-center gap-2 rounded-md border border-red-200/60 dark:border-red-900/30 px-2.5 py-2 text-[10px] hover:bg-red-100/50 dark:hover:bg-red-950/30 transition-colors group"
                       >
                         <span className="h-1.5 w-1.5 rounded-full bg-red-500 shrink-0" />
                         <span className="flex-1 truncate font-medium group-hover:text-primary transition-colors">
@@ -812,12 +848,12 @@ export default async function DashboardPage() {
           </Card>
 
           {/* Coluna: Esta semana */}
-          <Card className="border-primary/30 bg-primary/[0.02]">
+          <Card className="border-primary/30 bg-primary/[0.02] shadow-[0_1px_3px_rgb(0,0,0,0.04)]">
             <CardHeader className="pb-2 pt-4">
               <CardTitle className="text-xs font-semibold text-primary">
                 Esta semana
               </CardTitle>
-              <CardDescription className="text-[10px]">
+              <CardDescription className="text-[11px]">
                 {formatDate(inicioDaSemana)} – {formatDate(fimDaSemana)}
               </CardDescription>
             </CardHeader>
@@ -830,7 +866,7 @@ export default async function DashboardPage() {
                       href={`/dashboard/sprints/${sprint.id}`}
                       className="flex items-center gap-1.5 rounded-md bg-primary/10 px-2 py-1 text-[10px] font-medium text-primary hover:bg-primary/20 transition-colors"
                     >
-                      <Zap className="h-2.5 w-2.5 shrink-0" />
+                      <Zap className="h-2.5 w-2.5 shrink-0" strokeWidth={1.5} />
                       <span className="truncate">{sprint.nome}</span>
                       <span className="shrink-0 opacity-60 ml-auto">{sprint.projeto.nome}</span>
                     </Link>
@@ -843,7 +879,7 @@ export default async function DashboardPage() {
                     <Link
                       key={card.id}
                       href={`/dashboard/cards/${card.id}`}
-                      className="flex items-center gap-2 rounded-md border px-2 py-1.5 text-[10px] hover:bg-muted/50 transition-colors group"
+                      className="flex items-center gap-2 rounded-md border border-border/50 px-2.5 py-2 text-[10px] hover:bg-muted/50 transition-colors group"
                     >
                       <span
                         className={`h-1.5 w-1.5 rounded-full shrink-0 ${
@@ -873,20 +909,21 @@ export default async function DashboardPage() {
                   )}
                 </div>
               ) : sprintsEstaSemana.length === 0 ? (
-                <p className="text-center text-[10px] text-muted-foreground py-3">
-                  Sem entregas previstas
-                </p>
+                <div className="flex flex-col items-center py-4 text-center gap-1.5">
+                  <CalendarDays className="h-4 w-4 text-muted-foreground/50" strokeWidth={1.5} />
+                  <p className="text-[10px] text-muted-foreground">Sem entregas previstas</p>
+                </div>
               ) : null}
             </CardContent>
           </Card>
 
           {/* Coluna: Próxima semana */}
-          <Card>
+          <Card className="border-border/60 shadow-[0_1px_3px_rgb(0,0,0,0.04)]">
             <CardHeader className="pb-2 pt-4">
               <CardTitle className="text-xs font-semibold text-muted-foreground">
                 Próxima semana
               </CardTitle>
-              <CardDescription className="text-[10px]">
+              <CardDescription className="text-[11px]">
                 {formatDate(inicioProximaSemana)} – {formatDate(fimProximaSemana)}
               </CardDescription>
             </CardHeader>
@@ -899,7 +936,7 @@ export default async function DashboardPage() {
                       href={`/dashboard/sprints/${sprint.id}`}
                       className="flex items-center gap-1.5 rounded-md bg-primary/10 px-2 py-1 text-[10px] font-medium text-primary hover:bg-primary/20 transition-colors"
                     >
-                      <Zap className="h-2.5 w-2.5 shrink-0" />
+                      <Zap className="h-2.5 w-2.5 shrink-0" strokeWidth={1.5} />
                       <span className="truncate">{sprint.nome}</span>
                       <span className="shrink-0 opacity-60 ml-auto">{sprint.projeto.nome}</span>
                     </Link>
@@ -912,7 +949,7 @@ export default async function DashboardPage() {
                     <Link
                       key={card.id}
                       href={`/dashboard/cards/${card.id}`}
-                      className="flex items-center gap-2 rounded-md border px-2 py-1.5 text-[10px] hover:bg-muted/50 transition-colors group"
+                      className="flex items-center gap-2 rounded-md border border-border/50 px-2.5 py-2 text-[10px] hover:bg-muted/50 transition-colors group"
                     >
                       <span
                         className={`h-1.5 w-1.5 rounded-full shrink-0 ${
@@ -942,9 +979,10 @@ export default async function DashboardPage() {
                   )}
                 </div>
               ) : sprintsProximaSemana.length === 0 ? (
-                <p className="text-center text-[10px] text-muted-foreground py-3">
-                  Sem entregas previstas
-                </p>
+                <div className="flex flex-col items-center py-4 text-center gap-1.5">
+                  <CalendarDays className="h-4 w-4 text-muted-foreground/50" strokeWidth={1.5} />
+                  <p className="text-[10px] text-muted-foreground">Sem entregas previstas</p>
+                </div>
               ) : null}
             </CardContent>
           </Card>
@@ -953,57 +991,57 @@ export default async function DashboardPage() {
 
       {/* ── BLOCO 6: Gestão da Equipe ──────────────────────────────────────── */}
       {teamWorkload.length > 0 && (
-        <div className="space-y-2">
-          <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
-            <Users className="h-3.5 w-3.5" /> Gestão da equipe
+        <div className="space-y-3 animate-fade-in-up" style={{ animationDelay: "260ms" }}>
+          <h2 className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+            <Users className="h-3.5 w-3.5" strokeWidth={1.5} /> Gestão da equipe
           </h2>
-          <Card>
+          <Card className="shadow-[0_1px_3px_rgb(0,0,0,0.04)] border-border/60">
             <CardContent className="p-0">
               <div className="overflow-x-auto">
                 <table className="w-full text-xs">
                   <thead>
-                    <tr className="border-b bg-muted/40">
-                      <th className="text-left font-semibold text-muted-foreground px-4 py-3 whitespace-nowrap">
+                    <tr className="border-b border-border/60 bg-muted/30">
+                      <th className="text-left text-[11px] font-semibold text-muted-foreground px-4 py-3 whitespace-nowrap">
                         Colaborador
                       </th>
-                      <th className="text-center font-semibold text-muted-foreground px-3 py-3 whitespace-nowrap">
+                      <th className="text-center text-[11px] font-semibold text-muted-foreground px-3 py-3 whitespace-nowrap">
                         Ativos
                       </th>
-                      <th className="text-center font-semibold text-muted-foreground px-3 py-3 whitespace-nowrap">
+                      <th className="text-center text-[11px] font-semibold text-muted-foreground px-3 py-3 whitespace-nowrap">
                         Em andamento
                       </th>
-                      <th className="text-center font-semibold text-muted-foreground px-3 py-3 whitespace-nowrap">
+                      <th className="text-center text-[11px] font-semibold text-muted-foreground px-3 py-3 whitespace-nowrap">
                         Bloqueados
                       </th>
-                      <th className="text-center font-semibold text-muted-foreground px-3 py-3 whitespace-nowrap">
+                      <th className="text-center text-[11px] font-semibold text-muted-foreground px-3 py-3 whitespace-nowrap">
                         Atrasados
                       </th>
-                      <th className="text-center font-semibold text-muted-foreground px-3 py-3 whitespace-nowrap">
+                      <th className="text-center text-[11px] font-semibold text-muted-foreground px-3 py-3 whitespace-nowrap">
                         Sem prazo
                       </th>
-                      <th className="text-center font-semibold text-muted-foreground px-3 py-3 whitespace-nowrap">
+                      <th className="text-center text-[11px] font-semibold text-muted-foreground px-3 py-3 whitespace-nowrap">
                         Demandas
                       </th>
-                      <th className="text-left font-semibold text-muted-foreground px-3 py-3 whitespace-nowrap">
+                      <th className="text-left text-[11px] font-semibold text-muted-foreground px-3 py-3 whitespace-nowrap">
                         Carga
                       </th>
                       <th className="px-3 py-3" />
                     </tr>
                   </thead>
-                  <tbody className="divide-y">
+                  <tbody className="divide-y divide-border/50">
                     {teamWorkload.map(
                       ({ user, total, emAndamento, bloqueados, atrasados, semPrazo, demandas }) => {
                         const hasAlert = bloqueados > 0 || atrasados > 0 || semPrazo > 2;
                         return (
                           <tr
                             key={user.id}
-                            className={`hover:bg-muted/30 transition-colors ${
-                              hasAlert ? "bg-red-50/30 dark:bg-red-950/10" : ""
+                            className={`hover:bg-muted/40 transition-colors ${
+                              hasAlert ? "bg-red-50/40 dark:bg-red-950/10" : ""
                             }`}
                           >
                             <td className="px-4 py-3">
                               <div className="flex items-center gap-2.5">
-                                <div className="h-7 w-7 rounded-full bg-primary/15 text-primary flex items-center justify-center text-[10px] font-bold shrink-0">
+                                <div className="h-8 w-8 rounded-full bg-primary/10 text-primary flex items-center justify-center text-[10px] font-bold shrink-0 ring-1 ring-border">
                                   {iniciais(user.nome)}
                                 </div>
                                 <div>
@@ -1062,7 +1100,7 @@ export default async function DashboardPage() {
                             </td>
                             <td className="px-3 py-3">
                               <div className="flex items-center gap-1.5 min-w-[64px]">
-                                <div className="h-1.5 flex-1 rounded-full bg-muted overflow-hidden">
+                                <div className="h-2 flex-1 rounded-full bg-muted overflow-hidden">
                                   <div
                                     className={`h-full rounded-full transition-all ${
                                       total >= 8
@@ -1082,9 +1120,9 @@ export default async function DashboardPage() {
                             <td className="px-3 py-3">
                               <Link
                                 href={`/dashboard/kanban?responsavelId=${user.id}`}
-                                className="text-[10px] text-muted-foreground hover:text-primary transition-colors flex items-center gap-0.5 whitespace-nowrap"
+                                className="inline-flex items-center gap-0.5 text-[10px] text-muted-foreground hover:text-primary transition-colors px-2 py-1 rounded hover:bg-muted/60 whitespace-nowrap"
                               >
-                                Ver <ChevronRight className="h-3 w-3" />
+                                Ver <ChevronRight className="h-3 w-3" strokeWidth={1.5} />
                               </Link>
                             </td>
                           </tr>

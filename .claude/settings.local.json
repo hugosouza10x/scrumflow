@@ -13,7 +13,9 @@
       "Bash(ls -la \"C:/Users/hugos/OneDrive/Documentos/Aplicativos web/scrumflow/app/\\(dashboard\\)/\")",
       "Bash(ls -la \"C:/Users/hugos/OneDrive/Documentos/Aplicativos web/scrumflow/app/\\(dashboard\\)/dashboard/\")",
       "Bash(ls \"C:/Users/hugos/OneDrive/Documentos/Aplicativos web/scrumflow/app/\\(dashboard\\)/dashboard/backlog/\")",
-      "Bash(ls \"C:/Users/hugos/OneDrive/Documentos/Aplicativos web/scrumflow/app/\\(dashboard\\)/dashboard/meu-trabalho/\")"
+      "Bash(ls \"C:/Users/hugos/OneDrive/Documentos/Aplicativos web/scrumflow/app/\\(dashboard\\)/dashboard/meu-trabalho/\")",
+      "Read(//c/Users/hugos/.claude/plugins/cache/ui-ux-pro-max-skill/ui-ux-pro-max/2.0.1/.claude/skills/ui-ux-pro-max/**)",
+      "Bash(python3 scripts/search.py \"SaaS project management premium precision minimal dark executive dashboard\" --design-system -p \"ScrumFlow\" -f markdown)"
     ]
   }
 }

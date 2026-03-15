@@ -28,6 +28,13 @@ const config: Config = {
         md: "calc(var(--radius) - 2px)",
         sm: "calc(var(--radius) - 4px)",
       },
+      animation: {
+        "shimmer": "shimmer 1.8s linear infinite",
+        "fade-in-up": "fade-in-up 0.4s ease-out both",
+      },
+      backgroundSize: {
+        "shimmer": "200% 100%",
+      },
     },
   },
   plugins: [require("tailwindcss-animate"), require("@tailwindcss/typography")],

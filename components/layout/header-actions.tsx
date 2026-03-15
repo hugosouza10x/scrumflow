@@ -30,16 +30,16 @@ export function HeaderActions() {
         className="xl:hidden h-8 w-8 flex items-center justify-center rounded-md text-muted-foreground hover:bg-muted transition-colors"
         aria-label="Abrir menu"
       >
-        <Menu className="h-5 w-5" />
+        <Menu className="h-5 w-5" strokeWidth={1.5} />
       </button>
 
       <button
         onClick={() => setSearchOpen(true)}
-        className="flex items-center gap-2 rounded-md border bg-muted/50 px-3 py-1.5 text-sm text-muted-foreground hover:bg-muted transition-colors"
+        className="flex items-center gap-2 rounded-lg border border-border/60 bg-muted/40 shadow-sm px-3 py-1.5 text-sm text-muted-foreground hover:bg-muted/70 transition-colors"
       >
-        <Search className="h-3.5 w-3.5" />
+        <Search className="h-3.5 w-3.5" strokeWidth={1.5} />
         <span>Buscar...</span>
-        <kbd className="ml-2 hidden rounded border px-1.5 py-0.5 text-xs sm:flex">Ctrl K</kbd>
+        <kbd className="ml-2 hidden rounded border border-border/60 bg-background px-1.5 py-0.5 text-[10px] font-mono shadow-sm sm:flex">Ctrl K</kbd>
       </button>
 
       <div className="ml-auto flex items-center gap-1">

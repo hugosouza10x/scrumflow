@@ -24,7 +24,7 @@ export default async function DashboardLayout({
         <Sidebar user={session} />
       </SectionErrorBoundary>
       <main className="flex-1 flex flex-col min-h-0 overflow-hidden bg-muted/20">
-        <header className="sticky top-0 z-10 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+        <header className="sticky top-0 z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 shadow-[0_1px_0_0_hsl(var(--border)/0.6)]">
           <div className="flex h-14 items-center gap-4 px-6">
             <SectionErrorBoundary section="barra de ações">
               <HeaderActions />
@@ -32,7 +32,7 @@ export default async function DashboardLayout({
           </div>
         </header>
         <div className="flex-1 overflow-y-auto overflow-x-hidden">
-          <div className="p-3 md:p-4 lg:p-6">
+          <div className="p-4 md:p-6 lg:p-8">
             <ErrorBoundary>{children}</ErrorBoundary>
           </div>
         </div>

@@ -175,7 +175,7 @@ export function KanbanCard({
           if (!isOverlay && !isDemanda) router.push(`/dashboard/cards/${card.id}`);
         }}
         className={[
-          "group relative rounded-lg border bg-card p-3 text-sm shadow-sm hover:shadow-md transition-shadow space-y-2",
+          "group relative rounded-lg border bg-card p-3 text-sm shadow-sm hover:shadow-md hover:scale-[1.01] transition-all duration-150 space-y-2",
           !isDemanda ? "cursor-grab active:cursor-grabbing" : "cursor-default",
           desatualizado ? "border-amber-400/60 bg-amber-50/60 dark:bg-amber-950/20" : "",
           card.bloqueado ? "border-red-300/60" : "",

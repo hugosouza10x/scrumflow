@@ -7,8 +7,6 @@ import { CardStatusBadge, PrioridadeBadge } from "@/components/ui/status-badge";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import {
-  FolderKanban,
-  LayoutList,
   ShieldAlert,
   Clock,
   AlertTriangle,
@@ -20,31 +18,12 @@ import {
   ChevronRight,
   Inbox,
   CheckCircle2,
+  UserX,
+  CalendarX,
+  Activity,
 } from "lucide-react";
-import type { CardStatus } from "@/types";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
-
-const STATUS_ORDER: CardStatus[] = [
-  "BACKLOG",
-  "PRONTO_PARA_SPRINT",
-  "A_FAZER",
-  "EM_ANDAMENTO",
-  "EM_REVISAO",
-  "BLOQUEADO",
-  "HOMOLOGACAO",
-  "CONCLUIDO",
-  "CANCELADO",
-];
-
-const PRIORIDADE_ORDER = ["URGENTE", "ALTA", "MEDIA", "BAIXA"] as const;
-
-const PRIORIDADE_COLORS = {
-  URGENTE: { bar: "bg-red-500", text: "text-red-600 dark:text-red-400", label: "Urgente" },
-  ALTA: { bar: "bg-orange-500", text: "text-orange-600 dark:text-orange-400", label: "Alta" },
-  MEDIA: { bar: "bg-blue-500", text: "text-blue-600 dark:text-blue-400", label: "Média" },
-  BAIXA: { bar: "bg-slate-400", text: "text-slate-500 dark:text-slate-400", label: "Baixa" },
-} as const;
 
 function iniciais(nome: string): string {
   return nome
@@ -78,11 +57,6 @@ export default async function DashboardPage() {
   const projectIds = await getAccessibleProjectIds(session.id, session.cargo.slug);
   const cardProjetoFilter = buildProjectFilter(projectIds, { includeAvulsas: true });
 
-  const projetoAtivoFilter =
-    projectIds === "all"
-      ? { status: "ATIVO" as const }
-      : { status: "ATIVO" as const, id: { in: projectIds as string[] } };
-
   const sprintProjetoFilter =
     projectIds === "all" ? {} : { projetoId: { in: projectIds as string[] } };
 
@@ -97,7 +71,6 @@ export default async function DashboardPage() {
           ],
         };
 
-  // Typed aliases for use inside $transaction (groupBy requires exact types)
   const cardFilter = cardProjetoFilter as Prisma.CardWhereInput;
   const demandaWhere = demandaFilter as Prisma.DemandaWhereInput;
 
@@ -109,17 +82,34 @@ export default async function DashboardPage() {
   const ha7Dias = new Date(hoje);
   ha7Dias.setDate(hoje.getDate() - 7);
 
-  // ─── Batch 1: KPIs e sprints (transação única) ───────────────────────────
+  // Semana atual (segunda a domingo)
+  const inicioDaSemana = new Date(hoje);
+  inicioDaSemana.setDate(hoje.getDate() - ((hoje.getDay() + 6) % 7));
+  inicioDaSemana.setHours(0, 0, 0, 0);
+
+  const fimDaSemana = new Date(inicioDaSemana);
+  fimDaSemana.setDate(inicioDaSemana.getDate() + 6);
+  fimDaSemana.setHours(23, 59, 59, 999);
+
+  const inicioProximaSemana = new Date(inicioDaSemana);
+  inicioProximaSemana.setDate(inicioDaSemana.getDate() + 7);
+
+  const fimProximaSemana = new Date(inicioProximaSemana);
+  fimProximaSemana.setDate(inicioProximaSemana.getDate() + 6);
+  fimProximaSemana.setHours(23, 59, 59, 999);
+
+  // ─── Batch 1: KPIs, sprints e novos contadores ───────────────────────────
   const [
-    totalProjetos,
     totalCardsAtivos,
     cardsBloqueados,
     cardsAtrasados,
     cardsSemAtualizacao,
     totalDemandasAtivas,
     sprintsAtivas,
+    cardsSemResponsavel,
+    cardsSemPrazo,
+    cardsConcluidosEstaSemana,
   ] = await prisma.$transaction([
-    prisma.projeto.count({ where: projetoAtivoFilter }),
     prisma.card.count({
       where: { ...cardProjetoFilter, status: { notIn: ["CONCLUIDO", "CANCELADO"] } },
     }),
@@ -154,12 +144,33 @@ export default async function DashboardPage() {
       orderBy: { dataFim: "asc" },
       take: 3,
     }),
+    // Novos contadores
+    prisma.card.count({
+      where: {
+        ...cardProjetoFilter,
+        responsavelId: null,
+        status: { notIn: ["CONCLUIDO", "CANCELADO"] },
+      },
+    }),
+    prisma.card.count({
+      where: {
+        ...cardProjetoFilter,
+        prazo: null,
+        status: { in: ["A_FAZER", "EM_ANDAMENTO", "EM_REVISAO", "BLOQUEADO", "HOMOLOGACAO"] },
+      },
+    }),
+    prisma.card.count({
+      where: {
+        ...cardProjetoFilter,
+        status: "CONCLUIDO",
+        concluidoEm: { gte: inicioDaSemana },
+      },
+    }),
   ]);
 
-  // ─── Batch 2: análise e visualizações (interactive transaction — 1 conexão) ─
+  // ─── Batch 2: análise e visualizações ────────────────────────────────────
   const {
     cardsPorStatusRaw,
-    cardsPorPrioridadeRaw,
     demandasPorStatusRaw,
     cardsAtencaoList,
     cardsTimeline,
@@ -170,11 +181,6 @@ export default async function DashboardPage() {
     const cardsPorStatusRaw = await tx.card.groupBy({
       by: ["status"],
       where: cardFilter,
-      _count: { id: true },
-    });
-    const cardsPorPrioridadeRaw = await tx.card.groupBy({
-      by: ["prioridade"],
-      where: { ...cardFilter, status: { notIn: ["CONCLUIDO", "CANCELADO"] } },
       _count: { id: true },
     });
     const demandasPorStatusRaw = await tx.demanda.groupBy({
@@ -199,7 +205,7 @@ export default async function DashboardPage() {
         projeto: { select: { nome: true } },
       },
       orderBy: [{ bloqueado: "desc" }, { prazo: "asc" }],
-      take: 7,
+      take: 10,
     });
     const cardsTimeline = await tx.card.findMany({
       where: {
@@ -241,7 +247,6 @@ export default async function DashboardPage() {
     });
     return {
       cardsPorStatusRaw,
-      cardsPorPrioridadeRaw,
       demandasPorStatusRaw,
       cardsAtencaoList,
       cardsTimeline,
@@ -251,7 +256,7 @@ export default async function DashboardPage() {
     };
   });
 
-  // ─── Sprint progress (standalone — conditional) ───────────────────────────
+  // ─── Sprint progress ──────────────────────────────────────────────────────
   const concluidosPorSprint =
     sprintsAtivas.length > 0
       ? await prisma.card.groupBy({
@@ -279,7 +284,7 @@ export default async function DashboardPage() {
     ])
   );
 
-  const { teamUsers, cardsBloqueadosPorUser, cardsAtrasadosPorUser, cardsEmAndamentoPorUser } =
+  const { teamUsers, cardsBloqueadosPorUser, cardsAtrasadosPorUser, cardsEmAndamentoPorUser, cardsSemPrazoPorUser } =
     userIds.length > 0
       ? await prisma.$transaction(async (tx) => {
           const teamUsers = await tx.user.findMany({
@@ -301,36 +306,40 @@ export default async function DashboardPage() {
             where: { ...cardFilter, status: { in: ["EM_ANDAMENTO"] }, responsavelId: { in: userIds } },
             _count: { id: true },
           });
-          return { teamUsers, cardsBloqueadosPorUser, cardsAtrasadosPorUser, cardsEmAndamentoPorUser };
+          const cardsSemPrazoPorUser = await tx.card.groupBy({
+            by: ["responsavelId"],
+            where: {
+              ...cardFilter,
+              prazo: null,
+              status: { in: ["A_FAZER", "EM_ANDAMENTO", "EM_REVISAO", "BLOQUEADO", "HOMOLOGACAO"] },
+              responsavelId: { in: userIds },
+            },
+            _count: { id: true },
+          });
+          return { teamUsers, cardsBloqueadosPorUser, cardsAtrasadosPorUser, cardsEmAndamentoPorUser, cardsSemPrazoPorUser };
         })
-      : { teamUsers: [], cardsBloqueadosPorUser: [], cardsAtrasadosPorUser: [], cardsEmAndamentoPorUser: [] };
+      : {
+          teamUsers: [],
+          cardsBloqueadosPorUser: [],
+          cardsAtrasadosPorUser: [],
+          cardsEmAndamentoPorUser: [],
+          cardsSemPrazoPorUser: [],
+        };
 
   const teamWorkload = teamUsers
     .map((user) => ({
       user,
       total: teamCardsRaw.find((r) => r.responsavelId === user.id)?._count.id ?? 0,
-      emAndamento:
-        cardsEmAndamentoPorUser.find((r) => r.responsavelId === user.id)?._count.id ?? 0,
-      bloqueados:
-        cardsBloqueadosPorUser.find((r) => r.responsavelId === user.id)?._count.id ?? 0,
-      atrasados:
-        cardsAtrasadosPorUser.find((r) => r.responsavelId === user.id)?._count.id ?? 0,
+      emAndamento: cardsEmAndamentoPorUser.find((r) => r.responsavelId === user.id)?._count.id ?? 0,
+      bloqueados: cardsBloqueadosPorUser.find((r) => r.responsavelId === user.id)?._count.id ?? 0,
+      atrasados: cardsAtrasadosPorUser.find((r) => r.responsavelId === user.id)?._count.id ?? 0,
+      semPrazo: cardsSemPrazoPorUser.find((r) => r.responsavelId === user.id)?._count.id ?? 0,
       demandas: demandasPorUserRaw.find((r) => r.responsavelId === user.id)?._count.id ?? 0,
     }))
     .filter((m) => m.total > 0 || m.demandas > 0)
     .sort((a, b) => b.total - a.total);
 
-  // ─── Computed values ──────────────────────────────────────────────────────
-  const cardsPorStatus = STATUS_ORDER.map((s) => ({
-    status: s,
-    count: cardsPorStatusRaw.find((r) => r.status === s)?._count.id ?? 0,
-  })).filter((s) => s.count > 0);
-
-  const cardsPorPrioridade = PRIORIDADE_ORDER.map((p) => ({
-    prioridade: p,
-    count: cardsPorPrioridadeRaw.find((r) => r.prioridade === p)?._count.id ?? 0,
-  }));
-  const maxPrioridade = Math.max(...cardsPorPrioridade.map((p) => p.count), 1);
+  // ─── Valores computados ───────────────────────────────────────────────────
 
   const demandasNaoRefinadas =
     demandasPorStatusRaw.find((d) => d.statusRefinamento === "NAO_REFINADO")?._count.id ?? 0;
@@ -340,94 +349,76 @@ export default async function DashboardPage() {
     demandasPorStatusRaw.find((d) => d.statusRefinamento === "PRONTO_PARA_SPRINT")?._count.id ?? 0;
   const totalFunil = demandasNaoRefinadas + demandasEmRefinamento + demandasProntas;
 
-  // Timeline: 3 semanas
-  const weeks = [0, 1, 2].map((i) => {
-    const start = new Date(hoje);
-    start.setDate(hoje.getDate() + i * 7);
-    const end = new Date(start);
-    end.setDate(start.getDate() + 6);
-    const label =
-      i === 0
-        ? "Esta semana"
-        : i === 1
-        ? "Próxima semana"
-        : `${formatDate(start)} – ${formatDate(end)}`;
-    const cardsNaSemana = cardsTimeline.filter(
-      (c) => c.prazo && isSameWeek(new Date(c.prazo), start, end)
-    );
-    const sprintsNaSemana = sprintsTimeline.filter((s) => {
-      const si = new Date(s.dataInicio);
-      const sf = new Date(s.dataFim);
-      return si <= end && sf >= start;
-    });
-    return { label, start, end, cards: cardsNaSemana, sprints: sprintsNaSemana };
+  // Derivados de cardsPorStatusRaw
+  const cardsEmAndamento =
+    cardsPorStatusRaw.find((r) => r.status === "EM_ANDAMENTO")?._count.id ?? 0;
+
+  // Atenção: vencidos (não bloqueados) para a coluna de prazos
+  const cardsVencidos = cardsAtencaoList.filter(
+    (c) => c.prazo && new Date(c.prazo) < hoje && !c.bloqueado
+  );
+
+  // Timeline por semana
+  const cardsEstaSemana = cardsTimeline.filter(
+    (c) => c.prazo && isSameWeek(new Date(c.prazo), inicioDaSemana, fimDaSemana)
+  );
+  const cardsProximaSemana = cardsTimeline.filter(
+    (c) => c.prazo && isSameWeek(new Date(c.prazo), inicioProximaSemana, fimProximaSemana)
+  );
+  const sprintsEstaSemana = sprintsTimeline.filter((s) => {
+    const si = new Date(s.dataInicio);
+    const sf = new Date(s.dataFim);
+    return si <= fimDaSemana && sf >= inicioDaSemana;
+  });
+  const sprintsProximaSemana = sprintsTimeline.filter((s) => {
+    const si = new Date(s.dataInicio);
+    const sf = new Date(s.dataFim);
+    return si <= fimProximaSemana && sf >= inicioProximaSemana;
   });
 
-  // ─── KPIs ─────────────────────────────────────────────────────────────────
-  const kpis = [
-    {
-      label: "Projetos ativos",
-      value: totalProjetos,
-      icon: FolderKanban,
-      href: "/dashboard/projetos",
-      color: "text-blue-600 dark:text-blue-400",
-      bg: "bg-blue-50 dark:bg-blue-950/30",
-    },
-    {
-      label: "Cards ativos",
-      value: totalCardsAtivos,
-      icon: LayoutList,
-      color: "text-slate-600 dark:text-slate-300",
-      bg: "bg-slate-50 dark:bg-slate-800/40",
-    },
+  // Chips de alerta
+  const alertChips = [
     {
       label: "Bloqueados",
-      value: cardsBloqueados,
+      count: cardsBloqueados,
       icon: ShieldAlert,
       href: "/dashboard/kanban",
-      color:
-        cardsBloqueados > 0
-          ? "text-red-600 dark:text-red-400"
-          : "text-slate-500 dark:text-slate-400",
-      bg: cardsBloqueados > 0 ? "bg-red-50 dark:bg-red-950/30" : "bg-slate-50 dark:bg-slate-800/40",
-      border: cardsBloqueados > 0 ? "border-red-200 dark:border-red-900" : undefined,
+      active: "bg-red-50 border-red-200 text-red-700 dark:bg-red-950/30 dark:border-red-900 dark:text-red-400",
     },
     {
       label: "Atrasados",
-      value: cardsAtrasados,
+      count: cardsAtrasados,
       icon: Clock,
-      color:
-        cardsAtrasados > 0
-          ? "text-orange-600 dark:text-orange-400"
-          : "text-slate-500 dark:text-slate-400",
-      bg:
-        cardsAtrasados > 0
-          ? "bg-orange-50 dark:bg-orange-950/30"
-          : "bg-slate-50 dark:bg-slate-800/40",
-      border: cardsAtrasados > 0 ? "border-orange-200 dark:border-orange-900" : undefined,
+      href: undefined as string | undefined,
+      active: "bg-orange-50 border-orange-200 text-orange-700 dark:bg-orange-950/30 dark:border-orange-900 dark:text-orange-400",
     },
     {
-      label: "Demandas no funil",
-      value: totalDemandasAtivas,
-      icon: Inbox,
-      href: "/dashboard/backlog",
-      color: "text-violet-600 dark:text-violet-400",
-      bg: "bg-violet-50 dark:bg-violet-950/30",
+      label: "Sem responsável",
+      count: cardsSemResponsavel,
+      icon: UserX,
+      href: undefined as string | undefined,
+      active: "bg-amber-50 border-amber-200 text-amber-700 dark:bg-amber-950/30 dark:border-amber-900 dark:text-amber-400",
+    },
+    {
+      label: "Sem prazo",
+      count: cardsSemPrazo,
+      icon: CalendarX,
+      href: undefined as string | undefined,
+      active: "bg-yellow-50 border-yellow-200 text-yellow-700 dark:bg-yellow-950/30 dark:border-yellow-900 dark:text-yellow-400",
     },
     {
       label: "Sem atualização",
-      value: cardsSemAtualizacao,
+      count: cardsSemAtualizacao,
       icon: AlertTriangle,
-      color:
-        cardsSemAtualizacao > 0
-          ? "text-amber-600 dark:text-amber-400"
-          : "text-slate-500 dark:text-slate-400",
-      bg:
-        cardsSemAtualizacao > 0
-          ? "bg-amber-50 dark:bg-amber-950/30"
-          : "bg-slate-50 dark:bg-slate-800/40",
-      border:
-        cardsSemAtualizacao > 0 ? "border-amber-200 dark:border-amber-900" : undefined,
+      href: undefined as string | undefined,
+      active: "bg-slate-100 border-slate-300 text-slate-700 dark:bg-slate-800 dark:border-slate-600 dark:text-slate-300",
+    },
+    {
+      label: "Prontas p/ sprint",
+      count: demandasProntas,
+      icon: Inbox,
+      href: "/dashboard/backlog",
+      active: "bg-violet-50 border-violet-200 text-violet-700 dark:bg-violet-950/30 dark:border-violet-900 dark:text-violet-400",
     },
   ];
 
@@ -447,44 +438,50 @@ export default async function DashboardPage() {
         </p>
       </div>
 
-      {/* ── KPI Strip ─────────────────────────────────────────────────────── */}
-      <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-6">
-        {kpis.map((kpi) => {
-          const Icon = kpi.icon;
-          const inner = (
-            <Card
-              className={[
-                "transition-all",
-                kpi.border ? `border ${kpi.border}` : "",
-                kpi.href ? "hover:shadow-sm" : "",
-              ]
-                .filter(Boolean)
-                .join(" ")}
-            >
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 pt-4 px-4">
-                <CardTitle className="text-xs font-medium text-muted-foreground leading-tight">
-                  {kpi.label}
-                </CardTitle>
-                <div className={`rounded-md p-1.5 ${kpi.bg} shrink-0`}>
-                  <Icon className={`h-3.5 w-3.5 ${kpi.color}`} />
-                </div>
-              </CardHeader>
-              <CardContent className="pb-4 px-4">
-                <p className={`text-2xl font-bold tabular-nums ${kpi.color}`}>{kpi.value}</p>
-              </CardContent>
-            </Card>
-          );
-          return kpi.href ? (
-            <Link key={kpi.label} href={kpi.href} className="block">
-              {inner}
-            </Link>
-          ) : (
-            <div key={kpi.label}>{inner}</div>
-          );
-        })}
+      {/* ── BLOCO 1: Atenção Imediata ──────────────────────────────────────── */}
+      <div className="space-y-2">
+        <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+          <AlertCircle className="h-3.5 w-3.5" /> Atenção imediata
+        </h2>
+        <div className="flex flex-wrap gap-2">
+          {alertChips.map((chip) => {
+            const Icon = chip.icon;
+            const inner = (
+              <div
+                className={[
+                  "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors",
+                  chip.count > 0
+                    ? chip.active
+                    : "bg-muted border-transparent text-muted-foreground",
+                  chip.href && chip.count > 0 ? "cursor-pointer hover:opacity-80" : "",
+                ].filter(Boolean).join(" ")}
+              >
+                <Icon className="h-3.5 w-3.5 shrink-0" />
+                <span className="tabular-nums">{chip.count}</span>
+                <span>{chip.label}</span>
+              </div>
+            );
+            return chip.href && chip.count > 0 ? (
+              <Link key={chip.label} href={chip.href}>
+                {inner}
+              </Link>
+            ) : (
+              <div key={chip.label}>{inner}</div>
+            );
+          })}
+          {/* Contexto resumido */}
+          <div className="ml-auto flex items-center gap-3 text-xs text-muted-foreground">
+            <span className="tabular-nums">
+              <span className="font-semibold text-foreground">{totalCardsAtivos}</span> cards ativos
+            </span>
+            <span className="tabular-nums">
+              <span className="font-semibold text-foreground">{totalDemandasAtivas}</span> demandas no funil
+            </span>
+          </div>
+        </div>
       </div>
 
-      {/* ── Sprints em andamento ───────────────────────────────────────────── */}
+      {/* ── BLOCO 2: Sprints em andamento ─────────────────────────────────── */}
       {sprintsComProgresso.length > 0 && (
         <div className="space-y-2">
           <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
@@ -542,8 +539,55 @@ export default async function DashboardPage() {
         </div>
       )}
 
-      {/* ── Funil de Demandas + Atenção ───────────────────────────────────── */}
+      {/* ── BLOCO 3: Saúde da Operação + Funil ────────────────────────────── */}
       <div className="grid gap-6 lg:grid-cols-2">
+        {/* Tiles de saúde operacional */}
+        <div className="space-y-2">
+          <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+            <Activity className="h-3.5 w-3.5" /> Saúde da operação
+          </h2>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="rounded-xl border bg-sky-50 dark:bg-sky-950/20 p-4 space-y-1">
+              <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide leading-tight">
+                Em andamento
+              </p>
+              <p className="text-3xl font-bold tabular-nums text-sky-700 dark:text-sky-400">
+                {cardsEmAndamento}
+              </p>
+              <p className="text-[10px] text-muted-foreground">cards em execução</p>
+            </div>
+            <div className="rounded-xl border bg-emerald-50 dark:bg-emerald-950/20 p-4 space-y-1">
+              <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide leading-tight">
+                Concluídos esta semana
+              </p>
+              <p className="text-3xl font-bold tabular-nums text-emerald-700 dark:text-emerald-400">
+                {cardsConcluidosEstaSemana}
+              </p>
+              <p className="text-[10px] text-muted-foreground">desde segunda-feira</p>
+            </div>
+            <div className="rounded-xl border bg-violet-50 dark:bg-violet-950/20 p-4 space-y-1">
+              <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide leading-tight">
+                Prontas para sprint
+              </p>
+              <p className="text-3xl font-bold tabular-nums text-violet-700 dark:text-violet-400">
+                {demandasProntas}
+              </p>
+              <p className="text-[10px] text-muted-foreground">demandas refinadas</p>
+            </div>
+            <div className="rounded-xl border bg-amber-50 dark:bg-amber-950/20 p-4 space-y-1">
+              <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide leading-tight">
+                Taxa do funil
+              </p>
+              <p className="text-3xl font-bold tabular-nums text-amber-700 dark:text-amber-400">
+                {totalFunil > 0 ? Math.round((demandasProntas / totalFunil) * 100) : 0}%
+              </p>
+              <p className="text-[10px] text-muted-foreground">
+                {demandasProntas}/{totalFunil} prontas
+              </p>
+            </div>
+          </div>
+        </div>
+
         {/* Funil de Demandas */}
         <Card>
           <CardHeader className="pb-3">
@@ -612,38 +656,26 @@ export default async function DashboardPage() {
             )}
           </CardContent>
         </Card>
+      </div>
 
-        {/* Requer atenção */}
-        <Card
-          className={
-            cardsAtencaoList.length > 0
-              ? "border-amber-200/70 dark:border-amber-900/50"
-              : ""
-          }
-        >
-          <CardHeader className="pb-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                {cardsAtencaoList.length > 0 && (
-                  <AlertCircle className="h-4 w-4 text-amber-500 shrink-0" />
-                )}
-                <div>
-                  <CardTitle className="text-sm">Requer atenção</CardTitle>
-                  <CardDescription>Cards bloqueados ou com prazo vencido</CardDescription>
-                </div>
-              </div>
-              <span
-                className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
-                  cardsAtencaoList.length > 0
-                    ? "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300"
-                    : "bg-muted text-muted-foreground"
-                }`}
-              >
-                {cardsAtencaoList.length}
-              </span>
-            </div>
-          </CardHeader>
-          <CardContent>
+      {/* ── BLOCO 4: Requer Atenção (full width) ──────────────────────────── */}
+      <div className="space-y-2">
+        <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+          {cardsAtencaoList.length > 0 && (
+            <AlertCircle className="h-3.5 w-3.5 text-amber-500" />
+          )}
+          {cardsAtencaoList.length === 0 && (
+            <AlertCircle className="h-3.5 w-3.5" />
+          )}
+          Requer atenção
+          {cardsAtencaoList.length > 0 && (
+            <span className="ml-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">
+              {cardsAtencaoList.length}
+            </span>
+          )}
+        </h2>
+        <Card className={cardsAtencaoList.length > 0 ? "border-amber-200/70 dark:border-amber-900/50" : ""}>
+          <CardContent className="pt-4">
             {cardsAtencaoList.length === 0 ? (
               <div className="flex flex-col items-center py-6 text-center gap-2">
                 <div className="rounded-full bg-emerald-100 p-3 dark:bg-emerald-900/30">
@@ -657,7 +689,7 @@ export default async function DashboardPage() {
                 </p>
               </div>
             ) : (
-              <div className="space-y-1.5">
+              <div className="grid gap-1.5 lg:grid-cols-2">
                 {cardsAtencaoList.map((card) => {
                   const atrasado =
                     card.prazo &&
@@ -705,10 +737,16 @@ export default async function DashboardPage() {
                           )}
                         </div>
                       </div>
-                      <PrioridadeBadge
-                        prioridade={card.prioridade}
-                        className="shrink-0 text-[10px] py-0 px-1.5"
-                      />
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <CardStatusBadge
+                          status={card.status}
+                          className="text-[10px] py-0 px-1.5"
+                        />
+                        <PrioridadeBadge
+                          prioridade={card.prioridade}
+                          className="shrink-0 text-[10px] py-0 px-1.5"
+                        />
+                      </div>
                     </Link>
                   );
                 })}
@@ -718,152 +756,206 @@ export default async function DashboardPage() {
         </Card>
       </div>
 
-      {/* ── Distribuição por Prioridade + Status ──────────────────────────── */}
-      <div className="grid gap-6 lg:grid-cols-2">
-        {/* Por Prioridade */}
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm">Distribuição por prioridade</CardTitle>
-            <CardDescription>Cards ativos por nível de urgência</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {cardsPorPrioridade.map(({ prioridade, count }) => {
-              const cfg = PRIORIDADE_COLORS[prioridade as keyof typeof PRIORIDADE_COLORS];
-              const pct = Math.max((count / maxPrioridade) * 100, count > 0 ? 5 : 0);
-              return (
-                <div key={prioridade} className="space-y-1">
-                  <div className="flex items-center justify-between text-xs">
-                    <span className={`font-medium ${cfg.text}`}>{cfg.label}</span>
-                    <span className="font-bold tabular-nums text-foreground">{count}</span>
-                  </div>
-                  <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
-                    <div
-                      className={`h-full rounded-full ${cfg.bar}`}
-                      style={{ width: `${pct}%` }}
-                    />
-                  </div>
-                </div>
-              );
-            })}
-          </CardContent>
-        </Card>
-
-        {/* Por Status */}
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm">Distribuição por status</CardTitle>
-            <CardDescription>Todos os cards por etapa do fluxo</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="grid gap-1.5 sm:grid-cols-2">
-              {cardsPorStatus.map((s) => (
-                <div
-                  key={s.status}
-                  className="flex items-center justify-between rounded-lg border px-3 py-2"
-                >
-                  <CardStatusBadge status={s.status} />
-                  <span className="text-sm font-bold tabular-nums">{s.count}</span>
-                </div>
-              ))}
-              {cardsPorStatus.length === 0 && (
-                <p className="col-span-2 text-center text-sm text-muted-foreground py-4">
-                  Nenhum card.
-                </p>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* ── Linha do tempo: próximas 3 semanas ────────────────────────────── */}
+      {/* ── BLOCO 5: Prazos e Horizonte ───────────────────────────────────── */}
       <div className="space-y-2">
         <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
-          <CalendarDays className="h-3.5 w-3.5" /> Linha do tempo · Próximas 3 semanas
+          <CalendarDays className="h-3.5 w-3.5" /> Prazos e horizonte
         </h2>
         <div className="grid gap-4 md:grid-cols-3">
-          {weeks.map((week, wi) => (
-            <Card key={wi} className={wi === 0 ? "border-primary/30 bg-primary/[0.02]" : ""}>
-              <CardHeader className="pb-2 pt-4">
-                <CardTitle
-                  className={`text-xs font-semibold ${
-                    wi === 0 ? "text-primary" : "text-muted-foreground"
-                  }`}
-                >
-                  {week.label}
-                </CardTitle>
-                <CardDescription className="text-[10px]">
-                  {formatDate(week.start)} – {formatDate(week.end)}
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-2">
-                {/* Sprints desta semana */}
-                {week.sprints.length > 0 && (
-                  <div className="space-y-1">
-                    {week.sprints.map((sprint) => (
-                      <Link
-                        key={sprint.id}
-                        href={`/dashboard/sprints/${sprint.id}`}
-                        className="flex items-center gap-1.5 rounded-md bg-primary/10 px-2 py-1 text-[10px] font-medium text-primary hover:bg-primary/20 transition-colors"
-                      >
-                        <Zap className="h-2.5 w-2.5 shrink-0" />
-                        <span className="truncate">{sprint.nome}</span>
-                        <span className="shrink-0 opacity-60 ml-auto">{sprint.projeto.nome}</span>
-                      </Link>
-                    ))}
-                  </div>
-                )}
-                {/* Cards com prazo nesta semana */}
-                {week.cards.length > 0 ? (
-                  <div className="space-y-1">
-                    {week.cards.slice(0, 5).map((card) => (
+          {/* Coluna: Vencidos */}
+          <Card className={cardsVencidos.length > 0 ? "border-red-200/70 dark:border-red-900/50 bg-red-50/30 dark:bg-red-950/10" : ""}>
+            <CardHeader className="pb-2 pt-4">
+              <CardTitle
+                className={`text-xs font-semibold ${
+                  cardsVencidos.length > 0 ? "text-red-600 dark:text-red-400" : "text-muted-foreground"
+                }`}
+              >
+                Vencidos
+              </CardTitle>
+              <CardDescription className="text-[10px]">Prazo já passou</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-1">
+              {cardsVencidos.length === 0 ? (
+                <p className="text-center text-[10px] text-muted-foreground py-3">
+                  Nenhum vencido
+                </p>
+              ) : (
+                <>
+                  {cardsVencidos.slice(0, 5).map((card) => {
+                    const dias = Math.ceil(
+                      (hoje.getTime() - new Date(card.prazo!).getTime()) / (1000 * 60 * 60 * 24)
+                    );
+                    return (
                       <Link
                         key={card.id}
                         href={`/dashboard/cards/${card.id}`}
-                        className="flex items-center gap-2 rounded-md border px-2 py-1.5 text-[10px] hover:bg-muted/50 transition-colors group"
+                        className="flex items-center gap-2 rounded-md border border-red-200/50 dark:border-red-900/30 px-2 py-1.5 text-[10px] hover:bg-red-100/50 dark:hover:bg-red-950/30 transition-colors group"
                       >
-                        <span
-                          className={`h-1.5 w-1.5 rounded-full shrink-0 ${
-                            card.prioridade === "URGENTE"
-                              ? "bg-red-500"
-                              : card.prioridade === "ALTA"
-                              ? "bg-orange-500"
-                              : card.prioridade === "MEDIA"
-                              ? "bg-blue-500"
-                              : "bg-slate-400"
-                          }`}
-                        />
+                        <span className="h-1.5 w-1.5 rounded-full bg-red-500 shrink-0" />
                         <span className="flex-1 truncate font-medium group-hover:text-primary transition-colors">
                           {card.titulo}
                         </span>
-                        {card.prazo && (
-                          <span className="shrink-0 text-muted-foreground tabular-nums">
-                            {formatDate(new Date(card.prazo))}
-                          </span>
-                        )}
+                        <span className="shrink-0 text-red-600 dark:text-red-400 font-medium tabular-nums">
+                          {dias}d
+                        </span>
                       </Link>
-                    ))}
-                    {week.cards.length > 5 && (
-                      <p className="text-center text-[10px] text-muted-foreground pt-0.5">
-                        +{week.cards.length - 5} cards
-                      </p>
-                    )}
-                  </div>
-                ) : week.sprints.length === 0 ? (
-                  <p className="text-center text-[10px] text-muted-foreground py-3">
-                    Sem entregas previstas
-                  </p>
-                ) : null}
-              </CardContent>
-            </Card>
-          ))}
+                    );
+                  })}
+                  {cardsVencidos.length > 5 && (
+                    <p className="text-center text-[10px] text-muted-foreground pt-0.5">
+                      +{cardsVencidos.length - 5} vencidos
+                    </p>
+                  )}
+                </>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Coluna: Esta semana */}
+          <Card className="border-primary/30 bg-primary/[0.02]">
+            <CardHeader className="pb-2 pt-4">
+              <CardTitle className="text-xs font-semibold text-primary">
+                Esta semana
+              </CardTitle>
+              <CardDescription className="text-[10px]">
+                {formatDate(inicioDaSemana)} – {formatDate(fimDaSemana)}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {sprintsEstaSemana.length > 0 && (
+                <div className="space-y-1">
+                  {sprintsEstaSemana.map((sprint) => (
+                    <Link
+                      key={sprint.id}
+                      href={`/dashboard/sprints/${sprint.id}`}
+                      className="flex items-center gap-1.5 rounded-md bg-primary/10 px-2 py-1 text-[10px] font-medium text-primary hover:bg-primary/20 transition-colors"
+                    >
+                      <Zap className="h-2.5 w-2.5 shrink-0" />
+                      <span className="truncate">{sprint.nome}</span>
+                      <span className="shrink-0 opacity-60 ml-auto">{sprint.projeto.nome}</span>
+                    </Link>
+                  ))}
+                </div>
+              )}
+              {cardsEstaSemana.length > 0 ? (
+                <div className="space-y-1">
+                  {cardsEstaSemana.slice(0, 5).map((card) => (
+                    <Link
+                      key={card.id}
+                      href={`/dashboard/cards/${card.id}`}
+                      className="flex items-center gap-2 rounded-md border px-2 py-1.5 text-[10px] hover:bg-muted/50 transition-colors group"
+                    >
+                      <span
+                        className={`h-1.5 w-1.5 rounded-full shrink-0 ${
+                          card.prioridade === "URGENTE"
+                            ? "bg-red-500"
+                            : card.prioridade === "ALTA"
+                            ? "bg-orange-500"
+                            : card.prioridade === "MEDIA"
+                            ? "bg-blue-500"
+                            : "bg-slate-400"
+                        }`}
+                      />
+                      <span className="flex-1 truncate font-medium group-hover:text-primary transition-colors">
+                        {card.titulo}
+                      </span>
+                      {card.prazo && (
+                        <span className="shrink-0 text-muted-foreground tabular-nums">
+                          {formatDate(new Date(card.prazo))}
+                        </span>
+                      )}
+                    </Link>
+                  ))}
+                  {cardsEstaSemana.length > 5 && (
+                    <p className="text-center text-[10px] text-muted-foreground pt-0.5">
+                      +{cardsEstaSemana.length - 5} cards
+                    </p>
+                  )}
+                </div>
+              ) : sprintsEstaSemana.length === 0 ? (
+                <p className="text-center text-[10px] text-muted-foreground py-3">
+                  Sem entregas previstas
+                </p>
+              ) : null}
+            </CardContent>
+          </Card>
+
+          {/* Coluna: Próxima semana */}
+          <Card>
+            <CardHeader className="pb-2 pt-4">
+              <CardTitle className="text-xs font-semibold text-muted-foreground">
+                Próxima semana
+              </CardTitle>
+              <CardDescription className="text-[10px]">
+                {formatDate(inicioProximaSemana)} – {formatDate(fimProximaSemana)}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {sprintsProximaSemana.length > 0 && (
+                <div className="space-y-1">
+                  {sprintsProximaSemana.map((sprint) => (
+                    <Link
+                      key={sprint.id}
+                      href={`/dashboard/sprints/${sprint.id}`}
+                      className="flex items-center gap-1.5 rounded-md bg-primary/10 px-2 py-1 text-[10px] font-medium text-primary hover:bg-primary/20 transition-colors"
+                    >
+                      <Zap className="h-2.5 w-2.5 shrink-0" />
+                      <span className="truncate">{sprint.nome}</span>
+                      <span className="shrink-0 opacity-60 ml-auto">{sprint.projeto.nome}</span>
+                    </Link>
+                  ))}
+                </div>
+              )}
+              {cardsProximaSemana.length > 0 ? (
+                <div className="space-y-1">
+                  {cardsProximaSemana.slice(0, 5).map((card) => (
+                    <Link
+                      key={card.id}
+                      href={`/dashboard/cards/${card.id}`}
+                      className="flex items-center gap-2 rounded-md border px-2 py-1.5 text-[10px] hover:bg-muted/50 transition-colors group"
+                    >
+                      <span
+                        className={`h-1.5 w-1.5 rounded-full shrink-0 ${
+                          card.prioridade === "URGENTE"
+                            ? "bg-red-500"
+                            : card.prioridade === "ALTA"
+                            ? "bg-orange-500"
+                            : card.prioridade === "MEDIA"
+                            ? "bg-blue-500"
+                            : "bg-slate-400"
+                        }`}
+                      />
+                      <span className="flex-1 truncate font-medium group-hover:text-primary transition-colors">
+                        {card.titulo}
+                      </span>
+                      {card.prazo && (
+                        <span className="shrink-0 text-muted-foreground tabular-nums">
+                          {formatDate(new Date(card.prazo))}
+                        </span>
+                      )}
+                    </Link>
+                  ))}
+                  {cardsProximaSemana.length > 5 && (
+                    <p className="text-center text-[10px] text-muted-foreground pt-0.5">
+                      +{cardsProximaSemana.length - 5} cards
+                    </p>
+                  )}
+                </div>
+              ) : sprintsProximaSemana.length === 0 ? (
+                <p className="text-center text-[10px] text-muted-foreground py-3">
+                  Sem entregas previstas
+                </p>
+              ) : null}
+            </CardContent>
+          </Card>
         </div>
       </div>
 
-      {/* ── Distribuição da equipe ─────────────────────────────────────────── */}
+      {/* ── BLOCO 6: Gestão da Equipe ──────────────────────────────────────── */}
       {teamWorkload.length > 0 && (
         <div className="space-y-2">
           <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
-            <Users className="h-3.5 w-3.5" /> Distribuição da equipe
+            <Users className="h-3.5 w-3.5" /> Gestão da equipe
           </h2>
           <Card>
             <CardContent className="p-0">
@@ -875,7 +967,7 @@ export default async function DashboardPage() {
                         Colaborador
                       </th>
                       <th className="text-center font-semibold text-muted-foreground px-3 py-3 whitespace-nowrap">
-                        Cards ativos
+                        Ativos
                       </th>
                       <th className="text-center font-semibold text-muted-foreground px-3 py-3 whitespace-nowrap">
                         Em andamento
@@ -887,15 +979,21 @@ export default async function DashboardPage() {
                         Atrasados
                       </th>
                       <th className="text-center font-semibold text-muted-foreground px-3 py-3 whitespace-nowrap">
+                        Sem prazo
+                      </th>
+                      <th className="text-center font-semibold text-muted-foreground px-3 py-3 whitespace-nowrap">
                         Demandas
+                      </th>
+                      <th className="text-left font-semibold text-muted-foreground px-3 py-3 whitespace-nowrap">
+                        Carga
                       </th>
                       <th className="px-3 py-3" />
                     </tr>
                   </thead>
                   <tbody className="divide-y">
                     {teamWorkload.map(
-                      ({ user, total, emAndamento, bloqueados, atrasados, demandas }) => {
-                        const hasAlert = bloqueados > 0 || atrasados > 0;
+                      ({ user, total, emAndamento, bloqueados, atrasados, semPrazo, demandas }) => {
+                        const hasAlert = bloqueados > 0 || atrasados > 0 || semPrazo > 2;
                         return (
                           <tr
                             key={user.id}
@@ -917,15 +1015,7 @@ export default async function DashboardPage() {
                               </div>
                             </td>
                             <td className="px-3 py-3 text-center">
-                              <span
-                                className={`font-bold tabular-nums ${
-                                  total >= 8
-                                    ? "text-red-600 dark:text-red-400"
-                                    : total >= 5
-                                    ? "text-orange-600 dark:text-orange-400"
-                                    : "text-foreground"
-                                }`}
-                              >
+                              <span className="font-bold tabular-nums text-foreground">
                                 {total}
                               </span>
                             </td>
@@ -953,6 +1043,15 @@ export default async function DashboardPage() {
                               )}
                             </td>
                             <td className="px-3 py-3 text-center">
+                              {semPrazo > 0 ? (
+                                <span className={`font-bold tabular-nums ${semPrazo > 2 ? "text-yellow-600 dark:text-yellow-400" : "text-muted-foreground"}`}>
+                                  {semPrazo}
+                                </span>
+                              ) : (
+                                <span className="text-muted-foreground">—</span>
+                              )}
+                            </td>
+                            <td className="px-3 py-3 text-center">
                               {demandas > 0 ? (
                                 <span className="font-medium tabular-nums text-violet-600 dark:text-violet-400">
                                   {demandas}
@@ -960,6 +1059,25 @@ export default async function DashboardPage() {
                               ) : (
                                 <span className="text-muted-foreground">—</span>
                               )}
+                            </td>
+                            <td className="px-3 py-3">
+                              <div className="flex items-center gap-1.5 min-w-[64px]">
+                                <div className="h-1.5 flex-1 rounded-full bg-muted overflow-hidden">
+                                  <div
+                                    className={`h-full rounded-full transition-all ${
+                                      total >= 8
+                                        ? "bg-red-500"
+                                        : total >= 5
+                                        ? "bg-orange-400"
+                                        : "bg-emerald-500"
+                                    }`}
+                                    style={{ width: `${Math.min((total / 10) * 100, 100)}%` }}
+                                  />
+                                </div>
+                                <span className="text-[10px] text-muted-foreground tabular-nums w-4 text-right">
+                                  {total}
+                                </span>
+                              </div>
                             </td>
                             <td className="px-3 py-3">
                               <Link
